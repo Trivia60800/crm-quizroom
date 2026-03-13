@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRM — Quiz Room Amiens</title>
+  <meta name="description" content="CRM sur-mesure pour Quiz Room Amiens">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🎯</text></svg>">
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- App CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ========================================================
+       LOGIN SCREEN
+       ======================================================== -->
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <i class="fas fa-bullseye" style="margin-right:4px;"></i>
+        Quiz Room
+      </div>
+      <p class="login-subtitle">CRM Amiens — Espace commercial</p>
+
+      <div id="login-error" class="login-error">
+        <i class="fas fa-exclamation-circle"></i>
+        <span></span>
+      </div>
+
+      <div class="login-input-group">
+        <i class="fas fa-lock"></i>
+        <input type="password" id="login-password" placeholder="Mot de passe" autocomplete="current-password">
+      </div>
+
+      <button class="login-btn" id="login-btn">
+        <i class="fas fa-arrow-right-to-bracket" style="margin-right:6px;"></i>
+        Se connecter
+      </button>
+
+      <p style="margin-top:20px;font-size:12px;color:var(--muted);">
+        Accès réservé à l'équipe commerciale
+      </p>
+    </div>
+  </div>
+
+  <!-- ========================================================
+       APP SHELL
+       ======================================================== -->
+  <div id="app-shell">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-icon">
+            <i class="fas fa-bullseye"></i>
+          </div>
+          Quiz Room
+        </div>
+        <div class="sidebar-tagline">CRM Amiens</div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-section-label">Principal</div>
+
+        <button class="sidebar-nav-item" data-route="dashboard">
+          <i class="fas fa-chart-pie"></i>
+          Dashboard
+        </button>
+
+        <button class="sidebar-nav-item" data-route="pipeline">
+          <i class="fas fa-columns"></i>
+          Pipeline
+        </button>
+
+        <button class="sidebar-nav-item" data-route="prospection">
+          <i class="fas fa-map-marked-alt"></i>
+          Prospection
+        </button>
+
+        <button class="sidebar-nav-item" data-route="companies">
+          <i class="fas fa-building"></i>
+          Entreprises
+        </button>
+
+        <div class="sidebar-section-label">Commercial</div>
+
+        <button class="sidebar-nav-item" data-route="quotes">
+          <i class="fas fa-file-invoice"></i>
+          Devis
+        </button>
+
+        <button class="sidebar-nav-item" data-route="analytics">
+          <i class="fas fa-chart-bar"></i>
+          Analytique
+        </button>
+
+        <div class="sidebar-section-label">Configuration</div>
+
+        <button class="sidebar-nav-item" data-route="settings">
+          <i class="fas fa-cog"></i>
+          Paramètres
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-avatar" id="sidebar-avatar">
+          <i class="fas fa-user"></i>
+        </div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name" id="sidebar-user-name">Commercial</div>
+          <div class="sidebar-user-role">Quiz Room Amiens</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="main-wrapper">
+      <div id="main-content">
+        <!-- Contenu injecté dynamiquement par le router -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========================================================
+       SCRIPTS — Ordre de chargement critique
+       ======================================================== -->
+  <!-- Librairies CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- App modules — dans l'ordre -->
+  <script src="config.js"></script>
+  <script src="supabase.js"></script>
+  <script src="ui.js"></script>
+  <script src="scripts.js"></script>
+  <script src="pipeline.js"></script>
+  <script src="prospection.js"></script>
+  <script src="companies.js"></script>
+  <script src="quotes.js"></script>
+  <script src="dashboard.js"></script>
+  <script src="analytics.js"></script>
+  <script src="settings.js"></script>
+  <!-- script.js en dernier : auth + router + init DOMContentLoaded -->
+  <script src="script.js"></script>
+
+</body>
+</html>
