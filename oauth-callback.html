@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Connexion Gmail…</title>
+  <style>
+    body {
+      font-family: 'DM Sans', Arial, sans-serif;
+      background: #f7f6f3;
+      display: flex; align-items: center; justify-content: center;
+      height: 100vh; margin: 0;
+      color: #1a1917;
+    }
+    .box {
+      background: #fff;
+      border-radius: 16px;
+      padding: 40px 48px;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(0,0,0,.1);
+      max-width: 380px;
+    }
+    .icon { font-size: 2.5rem; margin-bottom: 16px; }
+    h2   { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+    p    { color: #9a9690; font-size: .9rem; }
+    .spinner {
+      width: 32px; height: 32px; border: 3px solid #e8e6e1;
+      border-top-color: #5b4cf0; border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 16px auto 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="icon">🔐</div>
+    <h2 id="title">Connexion Gmail en cours…</h2>
+    <p id="msg">Veuillez patienter, nous finalisons l'autorisation.</p>
+    <div class="spinner" id="spinner"></div>
+  </div>
+
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const code   = params.get('code');
+      const error  = params.get('error');
+
+      if (error) {
+        document.getElementById('title').textContent   = 'Autorisation refusée';
+        document.getElementById('msg').textContent     = 'Vous avez refusé l\'accès à Gmail.';
+        document.getElementById('spinner').style.display = 'none';
+        if (window.opener) {
+          window.opener.postMessage({ type: 'gmail_auth_code', error }, window.location.origin);
+        }
+        setTimeout(() => window.close(), 2000);
+        return;
+      }
+
+      if (code) {
+        document.getElementById('title').textContent = 'Autorisation accordée ✓';
+        document.getElementById('msg').textContent   = 'Cette fenêtre va se fermer automatiquement.';
+
+        if (window.opener) {
+          window.opener.postMessage(
+            { type: 'gmail_auth_code', code },
+            window.location.origin
+          );
+        }
+        setTimeout(() => window.close(), 1500);
+      } else {
+        document.getElementById('title').textContent   = 'Paramètre manquant';
+        document.getElementById('msg').textContent     = 'Code d\'autorisation introuvable dans l\'URL.';
+        document.getElementById('spinner').style.display = 'none';
+      }
+    })();
+  </script>
+</body>
+</html>

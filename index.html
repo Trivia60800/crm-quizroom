@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quiz Room CRM — Amiens</title>
+  <meta name="robots" content="noindex">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap" rel="stylesheet">
+
+  <!-- Font Awesome 6.5 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════
+     LOGIN OVERLAY
+══════════════════════════════════════════════════ -->
+<div id="login-overlay">
+  <div class="login-card">
+    <div class="login-logo">Quiz Room <span>CRM</span></div>
+    <p class="login-sub">Accès réservé — Amiens</p>
+    <div class="field">
+      <label for="login-password">Mot de passe</label>
+      <input type="password" id="login-password" placeholder="••••••••••" autocomplete="current-password">
+    </div>
+    <p class="login-error" id="login-error">Mot de passe incorrect.</p>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="handleLogin()">
+      <i class="fa-solid fa-arrow-right-to-bracket"></i> Accéder au CRM
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     CRM SHELL
+══════════════════════════════════════════════════ -->
+<div id="crm-shell" class="hidden">
+
+  <!-- ── SIDEBAR ─────────────────────────────────── -->
+  <aside id="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-full">Quiz Room <span>CRM</span></span>
+      <span class="logo-icon">QR</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item active" data-section="dashboard"   data-tooltip="Tableau de bord">
+        <i class="fa-solid fa-house"></i><span>Tableau de bord</span>
+      </a>
+      <a class="nav-item" data-section="prospection"  data-tooltip="Prospection">
+        <i class="fa-solid fa-magnifying-glass-location"></i><span>Prospection</span>
+      </a>
+      <a class="nav-item" data-section="companies"    data-tooltip="Entreprises">
+        <i class="fa-solid fa-building"></i><span>Entreprises</span>
+      </a>
+      <a class="nav-item" data-section="pipeline"     data-tooltip="Pipeline">
+        <i class="fa-solid fa-table-columns"></i><span>Pipeline</span>
+      </a>
+      <a class="nav-item" data-section="quotes"       data-tooltip="Devis">
+        <i class="fa-solid fa-file-invoice-dollar"></i><span>Devis</span>
+      </a>
+      <a class="nav-item" data-section="mediatheque"  data-tooltip="Médiathèque">
+        <i class="fa-solid fa-folder-open"></i><span>Médiathèque</span>
+      </a>
+      <a class="nav-item" data-section="email"        data-tooltip="Emails">
+        <i class="fa-solid fa-envelope"></i><span>Emails</span>
+      </a>
+      <a class="nav-item" data-section="analytics"    data-tooltip="Analytique">
+        <i class="fa-solid fa-chart-line"></i><span>Analytique</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <a class="nav-item" data-section="settings" data-tooltip="Paramètres">
+        <i class="fa-solid fa-gear"></i><span>Paramètres</span>
+      </a>
+      <button class="sidebar-toggle" onclick="toggleSidebar()">
+        <i class="fa-solid fa-chevron-left" id="sidebar-toggle-icon"></i>
+        <span>Réduire</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ─────────────────────────────────────── -->
+  <div id="main-area">
+
+    <!-- TOP HEADER -->
+    <header id="top-header">
+      <div class="header-title" id="header-title">Tableau de bord</div>
+
+      <div class="stats-bar">
+        <div class="stat-item">
+          <div class="stat-label">Pipeline</div>
+          <div class="stat-value" id="kpi-pipeline">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Gagné</div>
+          <div class="stat-value won" id="kpi-won">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Conversion</div>
+          <div class="stat-value accent" id="kpi-conv">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Relances dues</div>
+          <div class="stat-value" id="kpi-relances">—</div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="search-wrap">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="global-search" placeholder="Rechercher…">
+        </div>
+        <button class="btn btn-secondary" id="notif-btn" onclick="toggleNotifPanel()" title="Notifications">
+          <i class="fa-solid fa-bell"></i>
+          <span id="notif-badge"></span>
+        </button>
+        <button class="btn btn-primary" id="btn-nouveau" onclick="handleNewButton()">
+          <i class="fa-solid fa-plus"></i> Nouveau
+        </button>
+      </div>
+    </header>
+
+    <!-- DYNAMIC CONTENT -->
+    <div id="app-content">
+      <!-- Injecté par le router JS -->
+    </div>
+
+  </div><!-- /main-area -->
+
+</div><!-- /crm-shell -->
+
+<!-- ══════════════════════════════════════════════════
+     NOTIFICATION PANEL
+══════════════════════════════════════════════════ -->
+<div id="notif-panel">
+  <div class="notif-header">
+    <span><i class="fa-solid fa-bell"></i> Notifications</span>
+    <button class="modal-close" onclick="toggleNotifPanel()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="notif-list" id="notif-list">
+    <div class="notif-empty">Aucune notification</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODAL — DEAL (Add / Edit)
+══════════════════════════════════════════════════ -->
+<div id="modal-deal" class="modal" role="dialog" aria-modal="true">
+  <div class="modal-box" style="max-width:560px">
+
+    <div class="modal-header">
+      <h2 id="modal-deal-title">Nouveau deal</h2>
+      <button class="modal-close" onclick="closeModal('modal-deal')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="modal-body">
+      <form id="form-deal" onsubmit="return false">
+
+        <!-- Titre + Entreprise -->
+        <div class="form-row">
+          <div class="field">
+            <label>Titre du deal</label>
+            <input type="text" name="title" placeholder="Ex. Soirée entreprise Leroy">
+          </div>
+          <div class="field">
+            <label>Entreprise</label>
+            <select name="company_id" id="deal-company-select">
+              <option value="">— Entreprise (optionnel) —</option>
+            </select>
+          </div>
+        </div>
+
+        <hr class="form-divider">
+
+        <!-- Salle + Participants -->
+        <div class="form-row">
+          <div class="field">
+            <label>Salle / Formule</label>
+            <select name="room_type" id="deal-room-select"
+              oninput="_liveCapacityCheck()">
+              <option value="">— Salle / Formule —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Nb. participants</label>
+            <input type="number" name="nb_guests" id="deal-nb-guests"
+              min="1" max="500" placeholder="ex. 25"
+              oninput="_liveCapacityCheck()">
+          </div>
+        </div>
+        <div id="capacity-warning" class="capacity-warn-msg"></div>
+
+        <hr class="form-divider">
+
+        <!-- Montant + Statut -->
+        <div class="form-row">
+          <div class="field">
+            <label>Montant (€)</label>
+            <input type="number" name="amount" min="0" step="10" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Statut</label>
+            <select name="status" onchange="_toggleLostReason(this.value)">
+              <option value="new">🔵 Nouveau</option>
+              <option value="progress">🟦 En cours</option>
+              <option value="urgent">🔴 À relancer</option>
+              <option value="won">🟢 Gagné</option>
+              <option value="lost">⚫ Perdu</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Dates -->
+        <div class="form-row">
+          <div class="field">
+            <label>Date de l'événement</label>
+            <input type="date" name="date_event">
+          </div>
+          <div class="field">
+            <label>Date de relance</label>
+            <input type="date" name="date_relance">
+          </div>
+        </div>
+
+        <!-- Source -->
+        <div class="field">
+          <label>Source</label>
+          <select name="source">
+            <option value="">— Sélectionner —</option>
+            <option value="entrant">Entrant</option>
+            <option value="prospection">Prospection</option>
+            <option value="csv">Import CSV</option>
+            <option value="manual">Manuel</option>
+          </select>
+        </div>
+
+        <!-- Infos -->
+        <div class="field">
+          <label>Notes / Infos</label>
+          <textarea name="infos" rows="3" placeholder="Contexte, besoins spécifiques…"></textarea>
+        </div>
+
+        <!-- Raison de perte (masqué sauf statut = lost) -->
+        <div class="field" id="lost-reason-wrap" style="display:none">
+          <label>Raison de la perte</label>
+          <textarea name="lost_reason" rows="2" placeholder="Budget, concurrent, annulation…"></textarea>
+        </div>
+
+      </form>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="btn-delete-deal" style="display:none;margin-right:auto"
+        onclick="confirmDeleteDealUI(_editingDealId)">
+        <i class="fa-solid fa-trash"></i> Supprimer
+      </button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-deal')">Annuler</button>
+      <button class="btn btn-primary" id="btn-save-deal" onclick="saveDeal()">
+        <i class="fa-solid fa-check"></i> Enregistrer
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     TOAST & LOADER
+══════════════════════════════════════════════════ -->
+<div id="toast" class="toast" role="alert" aria-live="polite"></div>
+
+<div id="import-loader">
+  <div class="loader-card">
+    <div class="spinner" style="margin:0 auto"></div>
+    <div class="loader-text">Chargement…</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     SCRIPTS
+══════════════════════════════════════════════════ -->
+<!-- Supabase JS -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- SortableJS -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+<!-- jsPDF + html2canvas (Module Devis Phase 3) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<!-- Utils (ordre important) -->
+<script src="utils/config.js"></script>
+<script src="utils/supabase.js"></script>
+<script src="utils/ui.js"></script>
+<script src="utils/claude.js"></script>
+<script src="utils/gmail.js"></script>
+
+<!-- Chart.js (Phase 5 — Dashboard) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- Modules -->
+<script src="modules/pipeline.js"></script>
+<script src="modules/prospection.js"></script>
+<script src="modules/quotes.js"></script>
+<script src="modules/mediatheque.js"></script>
+<script src="modules/email.js"></script>
+<script src="modules/companies.js"></script>
+<script src="modules/dashboard.js"></script>
+<script src="modules/analytics.js"></script>
+<script src="modules/settings.js"></script>
+
+<!-- App core -->
+<script src="script.js"></script>
+
+</body>
+</html>
