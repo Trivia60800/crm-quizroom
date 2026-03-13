@@ -53,15 +53,19 @@ async function renderPipeline() {
 async function loadPipelineData() {
   Loader.show();
   try {
-    [pipelineDeals, pipelineCompanies] = await Promise.all([
+    const [deals, companies] = await Promise.allSettled([
       CRM.getDeals(),
       CRM.getCompanies(),
     ]);
+    pipelineDeals = deals.status === 'fulfilled' ? deals.value : [];
+    pipelineCompanies = companies.status === 'fulfilled' ? companies.value : [];
+    if (deals.status === 'rejected') console.warn('[Pipeline] Deals:', deals.reason?.message);
+    if (companies.status === 'rejected') console.warn('[Pipeline] Companies:', companies.reason?.message);
     renderKanban(pipelineDeals);
     updatePipelineSubtitle();
   } catch (err) {
     console.error('[Pipeline] Erreur chargement:', err);
-    Toast.error('Erreur de chargement du pipeline');
+    Toast.error(`Pipeline : ${err.message || err}`);
   } finally {
     Loader.hide();
   }

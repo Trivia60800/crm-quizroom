@@ -41,10 +41,14 @@ async function renderQuotes() {
 async function loadQuotesData() {
   Loader.show();
   try {
-    [quotesData, catalogueData] = await Promise.all([
+    const [q, c] = await Promise.allSettled([
       CRM.getQuotes(),
       CRM.getCatalogue(),
     ]);
+    quotesData = q.status === 'fulfilled' ? q.value : [];
+    catalogueData = c.status === 'fulfilled' ? c.value : [];
+    if (q.status === 'rejected') console.warn('[Quotes]', q.reason?.message);
+    if (c.status === 'rejected') console.warn('[Catalogue]', c.reason?.message);
     const sub = document.getElementById('quotes-subtitle');
     if (sub) sub.textContent = `${quotesData.length} devis`;
     renderQuotesPipeline();

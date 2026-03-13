@@ -3,18 +3,32 @@
 // ============================================================
 
 // --- Initialisation client Supabase ---
-const supabase = window.supabase.createClient(
-  CONFIG.SUPABASE_URL,
-  CONFIG.SUPABASE_ANON_KEY
-);
+let supabase;
+try {
+  if (window.supabase && window.supabase.createClient) {
+    supabase = window.supabase.createClient(
+      CONFIG.SUPABASE_URL,
+      CONFIG.SUPABASE_ANON_KEY
+    );
+  } else {
+    console.error('[supabase.js] Supabase CDN non chargé. Le CRM fonctionnera en mode dégradé.');
+  }
+} catch (e) {
+  console.error('[supabase.js] Erreur initialisation Supabase:', e.message);
+}
 
 // ============================================================
 // CRUD Générique
 // ============================================================
 
+function _requireSupabase() {
+  if (!supabase) throw new Error('Supabase non disponible');
+}
+
 const DB = {
   // --- SELECT ---
   async getAll(table, { orderBy = 'created_at', ascending = false, filters = {}, limit = null } = {}) {
+    _requireSupabase();
     let query = supabase.from(table).select('*').order(orderBy, { ascending });
     for (const [col, val] of Object.entries(filters)) {
       if (val !== undefined && val !== null && val !== '') {
@@ -31,6 +45,7 @@ const DB = {
   },
 
   async getById(table, id) {
+    _requireSupabase();
     const { data, error } = await supabase.from(table).select('*').eq('id', id).single();
     if (error) {
       console.error(`[DB.getById] ${table} id=${id}:`, error.message);
@@ -40,6 +55,7 @@ const DB = {
   },
 
   async getWhere(table, column, value, { orderBy = 'created_at', ascending = false } = {}) {
+    _requireSupabase();
     const { data, error } = await supabase
       .from(table)
       .select('*')
@@ -54,6 +70,7 @@ const DB = {
 
   // --- INSERT ---
   async insert(table, row) {
+    _requireSupabase();
     const { data, error } = await supabase.from(table).insert(row).select().single();
     if (error) {
       console.error(`[DB.insert] ${table}:`, error.message);
@@ -63,6 +80,7 @@ const DB = {
   },
 
   async insertMany(table, rows) {
+    _requireSupabase();
     if (!rows.length) return [];
     const { data, error } = await supabase.from(table).insert(rows).select();
     if (error) {
@@ -74,6 +92,7 @@ const DB = {
 
   // --- UPDATE ---
   async update(table, id, updates) {
+    _requireSupabase();
     updates.updated_at = new Date().toISOString();
     const { data, error } = await supabase.from(table).update(updates).eq('id', id).select().single();
     if (error) {
@@ -85,6 +104,7 @@ const DB = {
 
   // --- DELETE ---
   async remove(table, id) {
+    _requireSupabase();
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) {
       console.error(`[DB.remove] ${table} id=${id}:`, error.message);
@@ -95,6 +115,7 @@ const DB = {
 
   // --- UPSERT ---
   async upsert(table, row, { onConflict = 'id' } = {}) {
+    _requireSupabase();
     const { data, error } = await supabase.from(table).upsert(row, { onConflict }).select().single();
     if (error) {
       console.error(`[DB.upsert] ${table}:`, error.message);
@@ -105,6 +126,7 @@ const DB = {
 
   // --- COUNT ---
   async count(table, filters = {}) {
+    _requireSupabase();
     let query = supabase.from(table).select('*', { count: 'exact', head: true });
     for (const [col, val] of Object.entries(filters)) {
       if (val !== undefined && val !== null && val !== '') {
@@ -121,6 +143,7 @@ const DB = {
 
   // --- SEARCH (ilike) ---
   async search(table, column, term, { orderBy = 'created_at', ascending = false, limit = 50 } = {}) {
+    _requireSupabase();
     const { data, error } = await supabase
       .from(table)
       .select('*')
@@ -141,6 +164,7 @@ const DB = {
 
 const Settings = {
   async get(key, defaultValue = null) {
+    if (!supabase) return defaultValue;
     try {
       const { data, error } = await supabase
         .from('settings')
@@ -155,6 +179,7 @@ const Settings = {
   },
 
   async set(key, value) {
+    _requireSupabase();
     const { data, error } = await supabase
       .from('settings')
       .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
@@ -168,6 +193,7 @@ const Settings = {
   },
 
   async getAll() {
+    if (!supabase) return {};
     const { data, error } = await supabase.from('settings').select('*');
     if (error) {
       console.error('[Settings.getAll]:', error.message);
@@ -198,6 +224,7 @@ const CRM = {
   },
 
   async checkDuplicateCompany(name, googlePlaceId = null) {
+    if (!supabase) return null;
     // Vérifie par google_place_id d'abord, puis par nom similaire
     if (googlePlaceId) {
       const { data } = await supabase
@@ -256,6 +283,7 @@ const CRM = {
   },
 
   async getNextQuoteNumber() {
+    if (!supabase) return `${CONFIG.QUOTE_PREFIX}-${new Date().getFullYear()}-001`;
     const year = new Date().getFullYear();
     const prefix = `${CONFIG.QUOTE_PREFIX}-${year}-`;
     const { data } = await supabase
@@ -289,6 +317,7 @@ const CRM = {
 
   // --- Stats rapides ---
   async getMonthRevenue() {
+    if (!supabase) return 0;
     const start = new Date();
     start.setDate(1);
     start.setHours(0, 0, 0, 0);
@@ -302,6 +331,7 @@ const CRM = {
   },
 
   async getPipelineTotal() {
+    if (!supabase) return 0;
     const { data, error } = await supabase
       .from('deals')
       .select('amount')
@@ -311,6 +341,7 @@ const CRM = {
   },
 
   async getRelancesDues() {
+    if (!supabase) return [];
     const today = new Date().toISOString().split('T')[0];
     const { data, error } = await supabase
       .from('deals')
@@ -322,6 +353,7 @@ const CRM = {
   },
 
   async getConversionRate() {
+    if (!supabase) return 0;
     const { count: total } = await supabase
       .from('deals')
       .select('*', { count: 'exact', head: true });

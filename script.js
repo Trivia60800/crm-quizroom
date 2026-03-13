@@ -105,8 +105,36 @@ function showApp() {
   const userNameEl = document.getElementById('sidebar-user-name');
   if (userNameEl && userName) userNameEl.textContent = userName;
 
-  // Naviguer vers le dashboard par défaut
-  navigateTo('dashboard');
+  // Diagnostic Supabase avant de naviguer
+  runSupabaseDiagnostic().then(() => {
+    navigateTo('dashboard');
+  });
+}
+
+/** Test de connectivité Supabase — affiche un diagnostic clair si ça ne marche pas */
+async function runSupabaseDiagnostic() {
+  if (!supabase) {
+    Toast.error('Supabase non initialisé — vérifiez votre connexion internet et rechargez la page.');
+    return;
+  }
+  try {
+    const { data, error } = await supabase.from('settings').select('key').limit(1);
+    if (error) {
+      console.error('[Diagnostic] Supabase error:', error);
+      if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
+        Toast.error('Table "settings" inexistante. Exécutez le script SQL setup_supabase.sql dans Supabase → SQL Editor.');
+      } else if (error.code === '42501' || error.message?.includes('permission denied')) {
+        Toast.error('Accès refusé (RLS activé). Exécutez : ALTER TABLE settings DISABLE ROW LEVEL SECURITY;');
+      } else {
+        Toast.error(`Erreur Supabase : ${error.message}`);
+      }
+    } else {
+      console.log('[Diagnostic] Supabase OK — connecté, tables accessibles.');
+    }
+  } catch (err) {
+    console.error('[Diagnostic] Exception:', err);
+    Toast.error(`Connexion Supabase échouée : ${err.message}`);
+  }
 }
 
 function showLogin() {

@@ -70,7 +70,10 @@ async function loadCompaniesData() {
     renderCompaniesView(companiesData);
   } catch (err) {
     console.error('[Companies] Erreur:', err);
-    Toast.error('Erreur de chargement des entreprises');
+    companiesData = [];
+    Toast.error(`Entreprises : ${err.message || err}`);
+    const container = document.getElementById('companies-container');
+    if (container) container.innerHTML = emptyState('fa-exclamation-triangle', 'Erreur de connexion', err.message || 'Impossible de charger les entreprises');
   } finally {
     Loader.hide();
   }

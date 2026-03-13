@@ -102,11 +102,14 @@ async function loadAnalyticsData() {
 
   Loader.show();
   try {
-    const [deals, companies, quotes] = await Promise.all([
+    const [d, c, q] = await Promise.allSettled([
       CRM.getDeals(),
       CRM.getCompanies(),
       CRM.getQuotes(),
     ]);
+    const deals = d.status === 'fulfilled' ? d.value : [];
+    const companies = c.status === 'fulfilled' ? c.value : [];
+    const quotes = q.status === 'fulfilled' ? q.value : [];
 
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - analyticsPeriod);
@@ -124,7 +127,7 @@ async function loadAnalyticsData() {
 
   } catch (err) {
     console.error('[Analytics] Erreur:', err);
-    Toast.error('Erreur de chargement des analytics');
+    Toast.error(`Analytics : ${err.message || err}`);
   } finally {
     Loader.hide();
   }
