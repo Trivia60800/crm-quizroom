@@ -113,12 +113,12 @@ function showApp() {
 
 /** Test de connectivité Supabase — affiche un diagnostic clair si ça ne marche pas */
 async function runSupabaseDiagnostic() {
-  if (!supabase) {
+  if (!sb) {
     Toast.error('Supabase non initialisé — vérifiez votre connexion internet et rechargez la page.');
     return;
   }
   try {
-    const { data, error } = await supabase.from('settings').select('key').limit(1);
+    const { data, error } = await sb.from('settings').select('key').limit(1);
     if (error) {
       console.error('[Diagnostic] Supabase error:', error);
       if (error.message?.includes('relation') && error.message?.includes('does not exist')) {

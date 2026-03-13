@@ -1,35 +1,36 @@
 // ============================================================
 // supabase.js — Client Supabase + helpers CRUD
+// NOTE : le client s'appelle 'sb' (pas 'supabase') car le CDN
+//        crée déjà une globale window.supabase
 // ============================================================
 
 // --- Initialisation client Supabase ---
-let supabase;
+let sb;
 try {
   if (window.supabase && window.supabase.createClient) {
-    supabase = window.supabase.createClient(
+    sb = window.supabase.createClient(
       CONFIG.SUPABASE_URL,
       CONFIG.SUPABASE_ANON_KEY
     );
   } else {
-    console.error('[supabase.js] Supabase CDN non chargé. Le CRM fonctionnera en mode dégradé.');
+    console.error('[supabase.js] Supabase CDN non chargé.');
   }
 } catch (e) {
-  console.error('[supabase.js] Erreur initialisation Supabase:', e.message);
+  console.error('[supabase.js] Erreur initialisation:', e.message);
+}
+
+function _requireSB() {
+  if (!sb) throw new Error('Supabase non disponible — rechargez la page.');
 }
 
 // ============================================================
 // CRUD Générique
 // ============================================================
 
-function _requireSupabase() {
-  if (!supabase) throw new Error('Supabase non disponible');
-}
-
 const DB = {
-  // --- SELECT ---
   async getAll(table, { orderBy = 'created_at', ascending = false, filters = {}, limit = null } = {}) {
-    _requireSupabase();
-    let query = supabase.from(table).select('*').order(orderBy, { ascending });
+    _requireSB();
+    let query = sb.from(table).select('*').order(orderBy, { ascending });
     for (const [col, val] of Object.entries(filters)) {
       if (val !== undefined && val !== null && val !== '') {
         query = query.eq(col, val);
@@ -37,123 +38,79 @@ const DB = {
     }
     if (limit) query = query.limit(limit);
     const { data, error } = await query;
-    if (error) {
-      console.error(`[DB.getAll] ${table}:`, error.message);
-      throw error;
-    }
+    if (error) { console.error(`[DB.getAll] ${table}:`, error.message); throw error; }
     return data || [];
   },
 
   async getById(table, id) {
-    _requireSupabase();
-    const { data, error } = await supabase.from(table).select('*').eq('id', id).single();
-    if (error) {
-      console.error(`[DB.getById] ${table} id=${id}:`, error.message);
-      throw error;
-    }
+    _requireSB();
+    const { data, error } = await sb.from(table).select('*').eq('id', id).single();
+    if (error) { console.error(`[DB.getById] ${table}:`, error.message); throw error; }
     return data;
   },
 
   async getWhere(table, column, value, { orderBy = 'created_at', ascending = false } = {}) {
-    _requireSupabase();
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .eq(column, value)
-      .order(orderBy, { ascending });
-    if (error) {
-      console.error(`[DB.getWhere] ${table} ${column}=${value}:`, error.message);
-      throw error;
-    }
+    _requireSB();
+    const { data, error } = await sb.from(table).select('*').eq(column, value).order(orderBy, { ascending });
+    if (error) { console.error(`[DB.getWhere] ${table}:`, error.message); throw error; }
     return data || [];
   },
 
-  // --- INSERT ---
   async insert(table, row) {
-    _requireSupabase();
-    const { data, error } = await supabase.from(table).insert(row).select().single();
-    if (error) {
-      console.error(`[DB.insert] ${table}:`, error.message);
-      throw error;
-    }
+    _requireSB();
+    const { data, error } = await sb.from(table).insert(row).select().single();
+    if (error) { console.error(`[DB.insert] ${table}:`, error.message); throw error; }
     return data;
   },
 
   async insertMany(table, rows) {
-    _requireSupabase();
+    _requireSB();
     if (!rows.length) return [];
-    const { data, error } = await supabase.from(table).insert(rows).select();
-    if (error) {
-      console.error(`[DB.insertMany] ${table}:`, error.message);
-      throw error;
-    }
+    const { data, error } = await sb.from(table).insert(rows).select();
+    if (error) { console.error(`[DB.insertMany] ${table}:`, error.message); throw error; }
     return data || [];
   },
 
-  // --- UPDATE ---
   async update(table, id, updates) {
-    _requireSupabase();
+    _requireSB();
     updates.updated_at = new Date().toISOString();
-    const { data, error } = await supabase.from(table).update(updates).eq('id', id).select().single();
-    if (error) {
-      console.error(`[DB.update] ${table} id=${id}:`, error.message);
-      throw error;
-    }
+    const { data, error } = await sb.from(table).update(updates).eq('id', id).select().single();
+    if (error) { console.error(`[DB.update] ${table}:`, error.message); throw error; }
     return data;
   },
 
-  // --- DELETE ---
   async remove(table, id) {
-    _requireSupabase();
-    const { error } = await supabase.from(table).delete().eq('id', id);
-    if (error) {
-      console.error(`[DB.remove] ${table} id=${id}:`, error.message);
-      throw error;
-    }
+    _requireSB();
+    const { error } = await sb.from(table).delete().eq('id', id);
+    if (error) { console.error(`[DB.remove] ${table}:`, error.message); throw error; }
     return true;
   },
 
-  // --- UPSERT ---
   async upsert(table, row, { onConflict = 'id' } = {}) {
-    _requireSupabase();
-    const { data, error } = await supabase.from(table).upsert(row, { onConflict }).select().single();
-    if (error) {
-      console.error(`[DB.upsert] ${table}:`, error.message);
-      throw error;
-    }
+    _requireSB();
+    const { data, error } = await sb.from(table).upsert(row, { onConflict }).select().single();
+    if (error) { console.error(`[DB.upsert] ${table}:`, error.message); throw error; }
     return data;
   },
 
-  // --- COUNT ---
   async count(table, filters = {}) {
-    _requireSupabase();
-    let query = supabase.from(table).select('*', { count: 'exact', head: true });
+    _requireSB();
+    let query = sb.from(table).select('*', { count: 'exact', head: true });
     for (const [col, val] of Object.entries(filters)) {
       if (val !== undefined && val !== null && val !== '') {
         query = query.eq(col, val);
       }
     }
     const { count, error } = await query;
-    if (error) {
-      console.error(`[DB.count] ${table}:`, error.message);
-      throw error;
-    }
+    if (error) { console.error(`[DB.count] ${table}:`, error.message); throw error; }
     return count || 0;
   },
 
-  // --- SEARCH (ilike) ---
   async search(table, column, term, { orderBy = 'created_at', ascending = false, limit = 50 } = {}) {
-    _requireSupabase();
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .ilike(column, `%${term}%`)
-      .order(orderBy, { ascending })
-      .limit(limit);
-    if (error) {
-      console.error(`[DB.search] ${table} ${column}~${term}:`, error.message);
-      throw error;
-    }
+    _requireSB();
+    const { data, error } = await sb.from(table).select('*')
+      .ilike(column, `%${term}%`).order(orderBy, { ascending }).limit(limit);
+    if (error) { console.error(`[DB.search] ${table}:`, error.message); throw error; }
     return data || [];
   },
 };
@@ -164,13 +121,9 @@ const DB = {
 
 const Settings = {
   async get(key, defaultValue = null) {
-    if (!supabase) return defaultValue;
+    if (!sb) return defaultValue;
     try {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', key)
-        .single();
+      const { data, error } = await sb.from('settings').select('value').eq('key', key).single();
       if (error || !data) return defaultValue;
       return data.value;
     } catch {
@@ -179,26 +132,19 @@ const Settings = {
   },
 
   async set(key, value) {
-    _requireSupabase();
-    const { data, error } = await supabase
+    _requireSB();
+    const { data, error } = await sb
       .from('settings')
       .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-      .select()
-      .single();
-    if (error) {
-      console.error(`[Settings.set] ${key}:`, error.message);
-      throw error;
-    }
+      .select().single();
+    if (error) { console.error(`[Settings.set] ${key}:`, error.message); throw error; }
     return data;
   },
 
   async getAll() {
-    if (!supabase) return {};
-    const { data, error } = await supabase.from('settings').select('*');
-    if (error) {
-      console.error('[Settings.getAll]:', error.message);
-      return {};
-    }
+    if (!sb) return {};
+    const { data, error } = await sb.from('settings').select('*');
+    if (error) { console.error('[Settings.getAll]:', error.message); return {}; }
     const map = {};
     (data || []).forEach(row => { map[row.key] = row.value; });
     return map;
@@ -224,21 +170,12 @@ const CRM = {
   },
 
   async checkDuplicateCompany(name, googlePlaceId = null) {
-    if (!supabase) return null;
-    // Vérifie par google_place_id d'abord, puis par nom similaire
+    if (!sb) return null;
     if (googlePlaceId) {
-      const { data } = await supabase
-        .from('companies')
-        .select('id, name')
-        .eq('google_place_id', googlePlaceId)
-        .limit(1);
+      const { data } = await sb.from('companies').select('id, name').eq('google_place_id', googlePlaceId).limit(1);
       if (data && data.length > 0) return data[0];
     }
-    const { data } = await supabase
-      .from('companies')
-      .select('id, name')
-      .ilike('name', name.trim())
-      .limit(1);
+    const { data } = await sb.from('companies').select('id, name').ilike('name', name.trim()).limit(1);
     return (data && data.length > 0) ? data[0] : null;
   },
 
@@ -283,15 +220,11 @@ const CRM = {
   },
 
   async getNextQuoteNumber() {
-    if (!supabase) return `${CONFIG.QUOTE_PREFIX}-${new Date().getFullYear()}-001`;
+    if (!sb) return `${CONFIG.QUOTE_PREFIX}-${new Date().getFullYear()}-001`;
     const year = new Date().getFullYear();
     const prefix = `${CONFIG.QUOTE_PREFIX}-${year}-`;
-    const { data } = await supabase
-      .from('quotes')
-      .select('quote_number')
-      .ilike('quote_number', `${prefix}%`)
-      .order('quote_number', { ascending: false })
-      .limit(1);
+    const { data } = await sb.from('quotes').select('quote_number')
+      .ilike('quote_number', `${prefix}%`).order('quote_number', { ascending: false }).limit(1);
     if (data && data.length > 0) {
       const lastNum = parseInt(data[0].quote_number.replace(prefix, ''), 10);
       return `${prefix}${String(lastNum + 1).padStart(3, '0')}`;
@@ -309,58 +242,38 @@ const CRM = {
 
   // --- Templates ---
   async getTemplates(type = null) {
-    if (type) {
-      return DB.getWhere('templates', 'type', type, { orderBy: 'name', ascending: true });
-    }
+    if (type) return DB.getWhere('templates', 'type', type, { orderBy: 'name', ascending: true });
     return DB.getAll('templates', { orderBy: 'name', ascending: true });
   },
 
   // --- Stats rapides ---
   async getMonthRevenue() {
-    if (!supabase) return 0;
-    const start = new Date();
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-    const { data, error } = await supabase
-      .from('deals')
-      .select('amount')
-      .eq('status', 'Gagné')
-      .gte('updated_at', start.toISOString());
+    if (!sb) return 0;
+    const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0);
+    const { data, error } = await sb.from('deals').select('amount').eq('status', 'Gagné').gte('updated_at', start.toISOString());
     if (error) return 0;
     return (data || []).reduce((sum, d) => sum + (d.amount || 0), 0);
   },
 
   async getPipelineTotal() {
-    if (!supabase) return 0;
-    const { data, error } = await supabase
-      .from('deals')
-      .select('amount')
-      .in('status', ['Nouveau', 'En cours', 'À relancer']);
+    if (!sb) return 0;
+    const { data, error } = await sb.from('deals').select('amount').in('status', ['Nouveau', 'En cours', 'À relancer']);
     if (error) return 0;
     return (data || []).reduce((sum, d) => sum + (d.amount || 0), 0);
   },
 
   async getRelancesDues() {
-    if (!supabase) return [];
+    if (!sb) return [];
     const today = new Date().toISOString().split('T')[0];
-    const { data, error } = await supabase
-      .from('deals')
-      .select('*')
-      .in('status', ['Nouveau', 'En cours', 'À relancer'])
-      .lte('date_relance', today);
+    const { data, error } = await sb.from('deals').select('*').in('status', ['Nouveau', 'En cours', 'À relancer']).lte('date_relance', today);
     if (error) return [];
     return data || [];
   },
 
   async getConversionRate() {
-    if (!supabase) return 0;
-    const { count: total } = await supabase
-      .from('deals')
-      .select('*', { count: 'exact', head: true });
-    const { count: won } = await supabase
-      .from('deals')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'Gagné');
+    if (!sb) return 0;
+    const { count: total } = await sb.from('deals').select('*', { count: 'exact', head: true });
+    const { count: won } = await sb.from('deals').select('*', { count: 'exact', head: true }).eq('status', 'Gagné');
     if (!total) return 0;
     return Math.round((won / total) * 100);
   },
@@ -373,10 +286,8 @@ const CRM = {
 async function loadGoogleMapsKeyFromSettings() {
   try {
     const key = await Settings.get('google_maps_key');
-    if (key) {
-      CONFIG.GOOGLE_MAPS_KEY = key;
-    }
+    if (key) CONFIG.GOOGLE_MAPS_KEY = key;
   } catch (e) {
-    console.warn('[supabase.js] Impossible de charger la clé Google Maps depuis settings:', e.message);
+    console.warn('[supabase.js] Clé Maps non chargée:', e.message);
   }
 }
