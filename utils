@@ -867,11 +867,11 @@ function buildEmailHTML(bodyHtml, signature = '') {
 const CONFIG = {
   // ── Google Maps / Places API ───────────────────────────────────
   // Activer dans Google Cloud Console : Maps JavaScript API + Places API
-  GOOGLE_MAPS_KEY: 'VOTRE_CLE_GOOGLE_MAPS_ICI',
+  GOOGLE_MAPS_KEY: 'AIzaSyDZDSGG-eUIliKycHdEsB1WQB1AvGyk1w4',
 
   // ── Anthropic Claude API ───────────────────────────────────────
   // Usage interne acceptable. En prod public → proxy Supabase Edge Function.
-  CLAUDE_API_KEY: 'VOTRE_CLE_CLAUDE_ICI',
+  CLAUDE_API_KEY: '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',
 
   // ── Gmail OAuth 2.0 ───────────────────────────────────────────
   // 1. Créer un projet dans Google Cloud Console
@@ -880,5 +880,5 @@ const CONFIG = {
   // 4. Ajouter l'URI de redirection : https://votre-domaine.com/oauth-callback.html
   // ⚠️  Le CLIENT_SECRET ne doit JAMAIS figurer ici (côté client).
   //     L'échange code→token se fait via une Supabase Edge Function ou un proxy.
-  GMAIL_CLIENT_ID: 'VOTRE_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+  GMAIL_CLIENT_ID: '1084876272506-0sgea2vl99ss8bnjs8tjni040p7rtkii.apps.googleusercontent.com',
 };
