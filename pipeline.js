@@ -14,27 +14,61 @@ async function renderPipeline() {
   const main = document.getElementById('main-content');
   if (!main) return;
 
+  // Grouper les salles par type pour l'affichage
+  const roomGroups = {};
+  Object.entries(ROOMS).forEach(([k, v]) => {
+    const type = ROOM_COLORS[v.type]?.label || v.type;
+    if (!roomGroups[type]) roomGroups[type] = [];
+    roomGroups[type].push({ key: k, ...v });
+  });
+  const roomOptionsHtml = Object.entries(roomGroups).map(([group, rooms]) =>
+    `<optgroup label="${group}">${rooms.map(r => `<option value="${r.key}">${r.label}${r.capacity ? ` (max ${r.capacity})` : ''}</option>`).join('')}</optgroup>`
+  ).join('');
+
   main.innerHTML = `
-    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
       <div>
         <h1 style="margin:0;font-family:var(--font-head);font-size:24px;font-weight:600;">Pipeline</h1>
         <p style="margin:4px 0 0;font-size:13px;color:var(--muted);" id="pipeline-subtitle">Chargement…</p>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <div style="position:relative;">
-          <input type="text" id="pipeline-search" placeholder="Rechercher un deal…" 
-            style="padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:220px;font-family:var(--font-body);background:var(--surface);">
-          <i class="fas fa-search" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;"></i>
-        </div>
-        <select id="pipeline-filter-room" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-body);background:var(--surface);">
-          <option value="">Toutes les salles</option>
-          ${Object.entries(ROOMS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('')}
-        </select>
-        <button id="btn-add-deal" class="btn-primary" style="padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px;">
-          <i class="fas fa-plus"></i> Nouveau deal
-        </button>
-      </div>
+      <button id="btn-add-deal" class="btn-primary" style="padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px;">
+        <i class="fas fa-plus"></i> Nouveau deal
+      </button>
     </div>
+
+    <!-- Barre de filtres -->
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:20px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);">
+      <div style="position:relative;flex:1;min-width:180px;">
+        <input type="text" id="pipeline-search" placeholder="Rechercher un deal, entreprise…" 
+          style="width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-body);background:var(--surface);">
+        <i class="fas fa-search" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;"></i>
+      </div>
+      <select id="pipeline-filter-room" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-body);background:var(--surface);">
+        <option value="">Toutes les salles</option>
+        ${roomOptionsHtml}
+      </select>
+      <select id="pipeline-filter-source" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-body);background:var(--surface);">
+        <option value="">Toutes sources</option>
+        ${LEAD_SOURCES.map(s => `<option value="${s}">${s}</option>`).join('')}
+      </select>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;">Événement :</span>
+        <input type="date" id="pipeline-filter-date-from" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-body);">
+        <span style="font-size:12px;color:var(--muted);">→</span>
+        <input type="date" id="pipeline-filter-date-to" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font-body);">
+      </div>
+      <select id="pipeline-filter-amount" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-body);background:var(--surface);">
+        <option value="">Tous montants</option>
+        <option value="0-300">0 – 300 €</option>
+        <option value="300-700">300 – 700 €</option>
+        <option value="700-1500">700 – 1 500 €</option>
+        <option value="1500+">1 500 € +</option>
+      </select>
+      <button id="pipeline-clear-filters" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font-body);background:var(--surface);cursor:pointer;color:var(--muted);display:flex;align-items:center;gap:4px;" title="Réinitialiser les filtres">
+        <i class="fas fa-times"></i> Reset
+      </button>
+    </div>
+
     <div id="kanban-board" style="display:flex;gap:16px;overflow-x:auto;padding-bottom:16px;min-height:500px;"></div>
   `;
 
@@ -42,6 +76,19 @@ async function renderPipeline() {
   document.getElementById('btn-add-deal')?.addEventListener('click', () => openDealModal());
   document.getElementById('pipeline-search')?.addEventListener('input', debounce(filterPipeline, 250));
   document.getElementById('pipeline-filter-room')?.addEventListener('change', filterPipeline);
+  document.getElementById('pipeline-filter-source')?.addEventListener('change', filterPipeline);
+  document.getElementById('pipeline-filter-date-from')?.addEventListener('change', filterPipeline);
+  document.getElementById('pipeline-filter-date-to')?.addEventListener('change', filterPipeline);
+  document.getElementById('pipeline-filter-amount')?.addEventListener('change', filterPipeline);
+  document.getElementById('pipeline-clear-filters')?.addEventListener('click', () => {
+    document.getElementById('pipeline-search').value = '';
+    document.getElementById('pipeline-filter-room').value = '';
+    document.getElementById('pipeline-filter-source').value = '';
+    document.getElementById('pipeline-filter-date-from').value = '';
+    document.getElementById('pipeline-filter-date-to').value = '';
+    document.getElementById('pipeline-filter-amount').value = '';
+    filterPipeline();
+  });
 
   await loadPipelineData();
 }
@@ -269,22 +316,61 @@ async function handleDragEnd(evt) {
 function filterPipeline() {
   const search = (document.getElementById('pipeline-search')?.value || '').toLowerCase().trim();
   const roomFilter = document.getElementById('pipeline-filter-room')?.value || '';
+  const sourceFilter = document.getElementById('pipeline-filter-source')?.value || '';
+  const dateFrom = document.getElementById('pipeline-filter-date-from')?.value || '';
+  const dateTo = document.getElementById('pipeline-filter-date-to')?.value || '';
+  const amountFilter = document.getElementById('pipeline-filter-amount')?.value || '';
 
   let filtered = [...pipelineDeals];
 
+  // Recherche texte (deal, entreprise, contact, notes)
   if (search) {
     filtered = filtered.filter(d => {
       const company = pipelineCompanies.find(c => c.id === d.company_id);
-      const haystack = [d.title, company?.name, d.infos].filter(Boolean).join(' ').toLowerCase();
+      const haystack = [d.title, company?.name, company?.email, company?.phone, d.infos, d.source].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(search);
     });
   }
 
+  // Filtre salle
   if (roomFilter) {
     filtered = filtered.filter(d => d.room_type === roomFilter);
   }
 
+  // Filtre source
+  if (sourceFilter) {
+    filtered = filtered.filter(d => d.source === sourceFilter);
+  }
+
+  // Filtre date événement
+  if (dateFrom) {
+    filtered = filtered.filter(d => d.date_event && d.date_event >= dateFrom);
+  }
+  if (dateTo) {
+    filtered = filtered.filter(d => d.date_event && d.date_event <= dateTo);
+  }
+
+  // Filtre montant
+  if (amountFilter) {
+    const [min, max] = amountFilter.includes('+')
+      ? [parseFloat(amountFilter), Infinity]
+      : amountFilter.split('-').map(Number);
+    filtered = filtered.filter(d => {
+      const amt = d.amount || 0;
+      return amt >= min && amt <= (max || Infinity);
+    });
+  }
+
   renderKanban(filtered);
+
+  // Compteur de filtres actifs
+  const activeFilters = [search, roomFilter, sourceFilter, dateFrom, dateTo, amountFilter].filter(Boolean).length;
+  const subtitle = document.getElementById('pipeline-subtitle');
+  if (subtitle) {
+    const active = filtered.filter(d => !['Gagné', 'Perdu'].includes(d.status));
+    const total = active.reduce((s, d) => s + (d.amount || 0), 0);
+    subtitle.textContent = `${filtered.length} deal${filtered.length > 1 ? 's' : ''} affiché${filtered.length > 1 ? 's' : ''} · ${Fmt.currency(total)}${activeFilters ? ` · ${activeFilters} filtre${activeFilters > 1 ? 's' : ''} actif${activeFilters > 1 ? 's' : ''}` : ''}`;
+  }
 }
 
 // ============================================================
@@ -299,8 +385,15 @@ async function openDealModal(deal = null) {
     `<option value="${c.id}" ${deal && deal.company_id === c.id ? 'selected' : ''}>${c.name}</option>`
   ).join('');
 
-  const roomOptions = Object.entries(ROOMS).map(([k, v]) =>
-    `<option value="${k}" ${deal && deal.room_type === k ? 'selected' : ''}>${v.label}${v.capacity ? ` (max ${v.capacity})` : ''}</option>`
+  // Grouper les salles par type pour optgroup
+  const roomGroupsDeal = {};
+  Object.entries(ROOMS).forEach(([k, v]) => {
+    const type = ROOM_COLORS[v.type]?.label || v.type;
+    if (!roomGroupsDeal[type]) roomGroupsDeal[type] = [];
+    roomGroupsDeal[type].push({ key: k, ...v, selected: deal && deal.room_type === k });
+  });
+  const roomOptions = Object.entries(roomGroupsDeal).map(([group, rooms]) =>
+    `<optgroup label="${group}">${rooms.map(r => `<option value="${r.key}" ${r.selected ? 'selected' : ''}>${r.label}${r.capacity ? ` (max ${r.capacity})` : ''}</option>`).join('')}</optgroup>`
   ).join('');
 
   const statusOptions = CONFIG.PIPELINE_STATUSES.map(s =>

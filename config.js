@@ -52,6 +52,10 @@ const ROOMS = {
   quiz_tournoi:    { label: 'Quiz – Tournoi (2 salles)', capacity: 36,  type: 'quiz'    },
   karaoke_cabaret: { label: 'Karaoké – Cabaret',         capacity: 13,  type: 'karaoke' },
   karaoke_jungle:  { label: 'Karaoké – Jungle',          capacity: 17,  type: 'karaoke' },
+  pack_quiz_cabaret: { label: 'Pack Quiz + Cabaret',     capacity: 31,  type: 'pack'    },
+  pack_quiz_jungle:  { label: 'Pack Quiz + Jungle',      capacity: 35,  type: 'pack'    },
+  pack_tournoi_cabaret: { label: 'Pack Tournoi + Cabaret', capacity: 49, type: 'pack'   },
+  pack_tournoi_jungle:  { label: 'Pack Tournoi + Jungle',  capacity: 53, type: 'pack'   },
   privatisation:   { label: 'Privatisation complète',    capacity: null, type: 'full'    },
 };
 
@@ -59,6 +63,7 @@ const ROOMS = {
 const ROOM_COLORS = {
   quiz:    { bg: '#f0eeff', text: '#5b4cf0', label: 'Quiz'          },
   karaoke: { bg: '#f0f9ff', text: '#0284c7', label: 'Karaoké'       },
+  pack:    { bg: '#faf5ff', text: '#7c3aed', label: 'Pack'          },
   full:    { bg: '#fffbeb', text: '#d97706', label: 'Privatisation'  },
 };
 

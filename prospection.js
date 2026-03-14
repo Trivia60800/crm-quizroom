@@ -26,15 +26,47 @@ async function renderProspection() {
     <div id="prospection-container" style="display:grid;grid-template-columns:1fr 380px;gap:20px;height:calc(100vh - 200px);min-height:500px;">
       <div id="prospection-map-area" style="border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);position:relative;">
         <div id="prospection-map" style="width:100%;height:100%;"></div>
-        <div id="map-search-bar" style="position:absolute;top:12px;left:12px;right:12px;z-index:10;display:flex;gap:8px;">
-          <div style="flex:1;position:relative;">
-            <input type="text" id="prospect-search" placeholder="Rechercher : restaurants, CSE, agences…"
-              style="width:100%;padding:10px 14px 10px 38px;border:none;border-radius:10px;font-size:14px;font-family:var(--font-body);box-shadow:0 2px 12px rgba(0,0,0,0.15);background:var(--surface);">
-            <i class="fas fa-search" style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;"></i>
+        <div id="map-search-bar" style="position:absolute;top:12px;left:12px;right:12px;z-index:10;">
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <div style="flex:1;position:relative;">
+              <input type="text" id="prospect-search" placeholder="Rechercher : restaurants, CSE, agences, team building…"
+                style="width:100%;padding:10px 14px 10px 38px;border:none;border-radius:10px;font-size:14px;font-family:var(--font-body);box-shadow:0 2px 12px rgba(0,0,0,0.15);background:var(--surface);">
+              <i class="fas fa-search" style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;"></i>
+            </div>
+            <button id="btn-prospect-search" class="btn-primary" style="padding:10px 18px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;box-shadow:0 2px 12px rgba(0,0,0,0.15);">
+              <i class="fas fa-magnifying-glass-location"></i> Rechercher
+            </button>
           </div>
-          <button id="btn-prospect-search" class="btn-primary" style="padding:10px 18px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;box-shadow:0 2px 12px rgba(0,0,0,0.15);">
-            <i class="fas fa-magnifying-glass-location"></i> Rechercher
-          </button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <select id="prospect-radius" style="padding:6px 10px;border:none;border-radius:8px;font-size:12px;font-family:var(--font-body);box-shadow:0 2px 8px rgba(0,0,0,0.1);background:var(--surface);cursor:pointer;">
+              <option value="2000">2 km</option>
+              <option value="5000" selected>5 km</option>
+              <option value="10000">10 km</option>
+              <option value="20000">20 km</option>
+              <option value="50000">50 km</option>
+            </select>
+            <select id="prospect-type" style="padding:6px 10px;border:none;border-radius:8px;font-size:12px;font-family:var(--font-body);box-shadow:0 2px 8px rgba(0,0,0,0.1);background:var(--surface);cursor:pointer;">
+              <option value="">Tous types</option>
+              <option value="restaurant">Restaurants</option>
+              <option value="bar">Bars</option>
+              <option value="lodging">Hôtels</option>
+              <option value="store">Commerces</option>
+              <option value="school">Écoles</option>
+              <option value="local_government_office">Mairies / Admin</option>
+              <option value="gym">Salles de sport</option>
+              <option value="travel_agency">Agences voyage</option>
+            </select>
+            <select id="prospect-rating" style="padding:6px 10px;border:none;border-radius:8px;font-size:12px;font-family:var(--font-body);box-shadow:0 2px 8px rgba(0,0,0,0.1);background:var(--surface);cursor:pointer;">
+              <option value="0">Toutes notes</option>
+              <option value="3">⭐ 3+</option>
+              <option value="4">⭐ 4+</option>
+              <option value="4.5">⭐ 4.5+</option>
+            </select>
+            <select id="prospect-open" style="padding:6px 10px;border:none;border-radius:8px;font-size:12px;font-family:var(--font-body);box-shadow:0 2px 8px rgba(0,0,0,0.1);background:var(--surface);cursor:pointer;">
+              <option value="">Ouvert ou fermé</option>
+              <option value="open">Ouvert maintenant</option>
+            </select>
+          </div>
         </div>
       </div>
       <div id="prospection-panel" style="background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column;">
@@ -251,11 +283,26 @@ function searchPlaces() {
   // Nettoyer les anciens marqueurs
   clearMarkers();
 
+  // Lire les filtres
+  const radius = parseInt(document.getElementById('prospect-radius')?.value) || CONFIG.SEARCH_RADIUS;
+  const placeType = document.getElementById('prospect-type')?.value || '';
+  const minRating = parseFloat(document.getElementById('prospect-rating')?.value) || 0;
+  const openNowFilter = document.getElementById('prospect-open')?.value === 'open';
+
   const request = {
-    location: CONFIG.MAP_CENTER,
-    radius: CONFIG.SEARCH_RADIUS,
+    location: prospectionMap ? prospectionMap.getCenter() : CONFIG.MAP_CENTER,
+    radius,
     keyword: query,
   };
+
+  // Ajouter le filtre type si sélectionné
+  if (placeType) {
+    request.type = placeType;
+  }
+
+  if (openNowFilter) {
+    request.openNow = true;
+  }
 
   Loader.show(document.getElementById('prospection-panel'));
 
@@ -264,15 +311,32 @@ function searchPlaces() {
 
     if (status !== google.maps.places.PlacesServiceStatus.OK || !results?.length) {
       const list = document.getElementById('prospect-results-list');
-      if (list) list.innerHTML = emptyState('fa-search', 'Aucun résultat', `Aucune entreprise trouvée pour "${query}"`);
+      if (list) list.innerHTML = emptyState('fa-search', 'Aucun résultat', `Aucune entreprise trouvée pour "${query}" dans un rayon de ${radius / 1000} km`);
       document.getElementById('prospect-results-count').textContent = '0 résultat';
       return;
     }
 
-    document.getElementById('prospect-results-count').textContent = `${results.length} résultat${results.length > 1 ? 's' : ''}`;
+    // Filtrer par note minimum côté client
+    let filtered = results;
+    if (minRating > 0) {
+      filtered = results.filter(p => (p.rating || 0) >= minRating);
+    }
 
-    renderProspectResults(results);
-    addMarkersToMap(results);
+    if (!filtered.length) {
+      const list = document.getElementById('prospect-results-list');
+      if (list) list.innerHTML = emptyState('fa-star', 'Aucun résultat', `${results.length} trouvé${results.length > 1 ? 's' : ''} mais aucun avec une note ≥ ${minRating}`);
+      document.getElementById('prospect-results-count').textContent = '0 résultat (filtré par note)';
+      return;
+    }
+
+    // Trier par note décroissante
+    filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+    const radiusLabel = radius >= 1000 ? `${radius / 1000} km` : `${radius} m`;
+    document.getElementById('prospect-results-count').textContent = `${filtered.length} résultat${filtered.length > 1 ? 's' : ''} dans ${radiusLabel}`;
+
+    renderProspectResults(filtered);
+    addMarkersToMap(filtered);
   });
 }
 
