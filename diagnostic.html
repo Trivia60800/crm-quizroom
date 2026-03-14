@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Diagnostic Supabase — CRM Quiz Room</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; padding: 40px; }
+    h1 { font-size: 22px; margin-bottom: 20px; }
+    .card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .test { padding: 12px; border-radius: 8px; margin-bottom: 8px; font-size: 14px; }
+    .pass { background: #f0fdf4; color: #16a34a; }
+    .fail { background: #fef2f2; color: #dc2626; }
+    .warn { background: #fffbeb; color: #d97706; }
+    .info { background: #f0f9ff; color: #0284c7; }
+    button { padding: 12px 24px; border: none; border-radius: 8px; background: #5b4cf0; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 12px; }
+    button:hover { background: #4a3dd4; }
+    #results { margin-top: 16px; }
+    pre { background: #1a1917; color: #e8e6e1; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 12px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1>🔍 Diagnostic Supabase — CRM Quiz Room Amiens</h1>
+  
+  <div class="card">
+    <p>Ce diagnostic teste la connexion entre votre CRM et Supabase.</p>
+    <button onclick="runDiag()">Lancer le diagnostic</button>
+    <button onclick="forceRepair()" style="background:#d97706;">Forcer la réparation du cache</button>
+    <div id="results"></div>
+  </div>
+
+  <div class="card">
+    <h3>Logs bruts</h3>
+    <pre id="logs">En attente...</pre>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://sdtgzlrwsrmhsvoztdat.supabase.co';
+    const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNkdGd6bHJ3c3JtaHN2b3p0ZGF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxODgwMjksImV4cCI6MjA4Nzc2NDAyOX0.DZYgBhijp71scgO1fTAte5e536WsDaMb9zTFE_eoa8k';
+    const TABLES = ['settings', 'companies', 'deals', 'contacts', 'activities', 'quotes', 'catalogue', 'templates'];
+
+    const headers = {
+      'apikey': ANON_KEY,
+      'Authorization': `Bearer ${ANON_KEY}`,
+      'Accept': 'application/json',
+    };
+
+    let logs = '';
+    function log(msg) {
+      logs += msg + '\n';
+      document.getElementById('logs').textContent = logs;
+      console.log(msg);
+    }
+
+    function addResult(text, type) {
+      const div = document.createElement('div');
+      div.className = `test ${type}`;
+      div.textContent = text;
+      document.getElementById('results').appendChild(div);
+    }
+
+    async function runDiag() {
+      document.getElementById('results').innerHTML = '';
+      logs = '';
+
+      // Test 1: Connexion basique
+      log('--- Test 1: Connexion Supabase ---');
+      try {
+        const resp = await fetch(`${SUPABASE_URL}/rest/v1/`, { headers });
+        log(`Status: ${resp.status}`);
+        if (resp.ok) {
+          addResult('✅ Connexion Supabase OK', 'pass');
+        } else {
+          addResult(`❌ Connexion échouée (status ${resp.status})`, 'fail');
+          return;
+        }
+      } catch (e) {
+        addResult(`❌ Impossible de contacter Supabase: ${e.message}`, 'fail');
+        log(`Error: ${e.message}`);
+        return;
+      }
+
+      // Test 2: Chaque table
+      log('\n--- Test 2: Tables accessibles ---');
+      let okCount = 0;
+      let failedTables = [];
+
+      for (const table of TABLES) {
+        try {
+          const resp = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&limit=1`, { headers });
+          const body = await resp.text();
+          log(`${table}: ${resp.status} ${body.substring(0, 100)}`);
+          
+          if (resp.ok) {
+            addResult(`✅ Table "${table}" accessible`, 'pass');
+            okCount++;
+          } else {
+            addResult(`❌ Table "${table}" — ${resp.status}: ${body.substring(0, 80)}`, 'fail');
+            failedTables.push(table);
+          }
+        } catch (e) {
+          addResult(`❌ Table "${table}" — erreur: ${e.message}`, 'fail');
+          failedTables.push(table);
+        }
+      }
+
+      // Résumé
+      log(`\n--- Résultat: ${okCount}/${TABLES.length} tables OK ---`);
+      if (okCount === TABLES.length) {
+        addResult(`🎉 Toutes les tables sont accessibles ! Le CRM devrait fonctionner.`, 'pass');
+      } else {
+        addResult(`⚠️ ${failedTables.length} tables inaccessibles: ${failedTables.join(', ')}. Cliquez "Forcer la réparation du cache".`, 'warn');
+      }
+
+      // Test 3: Vérifier si reload_schema_cache existe
+      log('\n--- Test 3: Fonction reload_schema_cache ---');
+      try {
+        const resp = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reload_schema_cache`, { 
+          method: 'POST', 
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: '{}'
+        });
+        log(`RPC reload_schema_cache: ${resp.status}`);
+        if (resp.ok) {
+          addResult('✅ Fonction reload_schema_cache disponible', 'pass');
+        } else {
+          addResult('⚠️ Fonction reload_schema_cache non trouvée — exécutez le SQL de réparation', 'warn');
+        }
+      } catch (e) {
+        addResult(`⚠️ RPC test échoué: ${e.message}`, 'warn');
+      }
+    }
+
+    async function forceRepair() {
+      document.getElementById('results').innerHTML = '';
+      logs = '';
+      
+      addResult('🔧 Tentative de réparation en cours...', 'info');
+      log('--- Forcer reload schema via RPC ---');
+
+      // Tenter le RPC
+      try {
+        const resp = await fetch(`${SUPABASE_URL}/rest/v1/rpc/reload_schema_cache`, { 
+          method: 'POST', 
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: '{}'
+        });
+        log(`RPC: ${resp.status}`);
+        
+        if (resp.ok) {
+          addResult('✅ NOTIFY pgrst envoyé — attente 3 secondes...', 'pass');
+          await new Promise(r => setTimeout(r, 3000));
+        } else {
+          addResult('⚠️ RPC indisponible. Créez la fonction SQL ci-dessous puis réessayez.', 'warn');
+          addResult('SQL à exécuter dans Supabase SQL Editor:', 'info');
+          log('\nSQL à exécuter:');
+          log('CREATE OR REPLACE FUNCTION public.reload_schema_cache() RETURNS text AS $$ BEGIN NOTIFY pgrst, \'reload schema\'; RETURN \'ok\'; END; $$ LANGUAGE plpgsql SECURITY DEFINER;');
+          log('GRANT EXECUTE ON FUNCTION public.reload_schema_cache() TO anon, authenticated;');
+        }
+      } catch(e) {
+        log(`RPC error: ${e.message}`);
+      }
+
+      // Re-tester
+      addResult('🔄 Re-test des tables...', 'info');
+      await runDiag();
+    }
+  </script>
+</body>
+</html>
