@@ -1,10 +1,97 @@
 // ============================================================
-// pipeline.js — Kanban Pipeline, Drag & Drop, Lead Scoring
+// pipeline.js — Kanban Pipeline, Drag & Drop, Lead Scoring, Relances
 // ============================================================
 
 let pipelineDeals = [];
 let pipelineCompanies = [];
 let sortableInstances = [];
+let currentRelanceId = null;
+let relanceMoyen = null;
+
+const TODAY = new Date().toISOString().split('T')[0];
+
+// ============================================================
+// CALCUL AUTOMATIQUE DE LA PROCHAINE RELANCE
+// ============================================================
+
+/**
+ * Calcule la prochaine date de relance :
+ * - Si événement dans < 30 jours : jalons à rebours [-21j, -14j, -7j, -3j]
+ * - Sinon : jalons depuis la création [J+3, J+7, J+14, J+30, puis mensuel]
+ */
+function computeNextRelance(deal) {
+  const dateC = deal.date_created || deal.created_at || TODAY;
+  const dateE = deal.date_event || null;
+  const n = deal.nb_relances || 0;
+  const today = new Date(TODAY);
+  const created = new Date(dateC);
+
+  // --- Mode rebours (événement dans < 30j) ---
+  if (dateE) {
+    const event = new Date(dateE + 'T12:00:00');
+    const daysToEvent = Math.ceil((event - today) / 86400000);
+    const MIN_BEFORE = 3;
+
+    if (daysToEvent <= 30 && daysToEvent > MIN_BEFORE) {
+      const jalons = [21, 14, 7, 3];
+      for (const j of jalons) {
+        if (j <= MIN_BEFORE) break;
+        const jalDate = new Date(dateE + 'T12:00:00');
+        jalDate.setDate(jalDate.getDate() - j);
+        const jalStr = jalDate.toISOString().split('T')[0];
+        if (jalStr > TODAY) return jalStr;
+      }
+      return null;
+    }
+  }
+
+  // --- Mode création (événement lointain ou absent) ---
+  const jalons = [3, 7, 14, 30];
+  for (let i = 0; i < jalons.length; i++) {
+    if (i >= n) {
+      const target = new Date(created);
+      target.setDate(target.getDate() + jalons[i]);
+      const targetStr = target.toISOString().split('T')[0];
+      if (targetStr > TODAY) return targetStr;
+    }
+  }
+  // Au-delà : mensuel
+  const base = new Date(created);
+  base.setDate(base.getDate() + 30);
+  const extra = n - jalons.length + 1;
+  if (extra > 0) base.setMonth(base.getMonth() + extra);
+  if (dateE) {
+    const diff = Math.ceil((new Date(dateE + 'T12:00:00') - base) / 86400000);
+    if (diff <= 3) return null;
+  }
+  const str = base.toISOString().split('T')[0];
+  return str > TODAY ? str : null;
+}
+
+/** Label de relance pour les cartes */
+function relanceLabel(deal) {
+  if (!deal.date_relance) return null;
+  const diff = Math.round((new Date(deal.date_relance) - new Date(TODAY)) / 86400000);
+  if (diff < 0)  return { text: `Retard ${Math.abs(diff)}j`, cls: 'overdue' };
+  if (diff === 0) return { text: "Aujourd'hui", cls: 'today' };
+  if (diff === 1) return { text: 'Demain', cls: 'soon' };
+  if (diff <= 3)  return { text: `Dans ${diff}j`, cls: 'soon' };
+  return { text: `Dans ${diff}j`, cls: '' };
+}
+
+/** Score de priorité "À relancer" (plus bas = plus urgent) */
+function relancePriorityScore(deal) {
+  const relances = deal.nb_relances || 0;
+  const daysToEvent = deal.date_event ? Math.round((new Date(deal.date_event) - new Date(TODAY)) / 86400000) : 9999;
+  const daysLate = deal.date_relance ? Math.max(0, Math.round((new Date(TODAY) - new Date(deal.date_relance)) / 86400000)) : 0;
+  const eventBonus = daysToEvent <= 14 ? (14 - daysToEvent) * 10 : 0;
+  return relances * 3 - eventBonus - daysLate * 2;
+}
+
+/** Vérifie si un deal devrait être dans "À relancer" (date relance atteinte) */
+function isOverdue(deal) {
+  return deal.date_relance && deal.date_relance <= TODAY && !['Gagné', 'Perdu'].includes(deal.status);
+}
 
 // ============================================================
 // RENDER PRINCIPAL
@@ -148,7 +235,20 @@ function renderKanban(deals) {
 
   CONFIG.PIPELINE_STATUSES.forEach(status => {
     const col = statusColors[status] || { header: 'var(--muted)', bg: 'var(--surface2)' };
-    const statusDeals = deals.filter(d => d.status === status);
+
+    // Auto-assignation : les deals en retard de relance vont dans "À relancer"
+    let statusDeals;
+    if (status === 'À relancer') {
+      statusDeals = deals.filter(d => d.status === 'À relancer' || isOverdue(d));
+      // Trier par priorité (plus urgent en haut)
+      statusDeals.sort((a, b) => relancePriorityScore(a) - relancePriorityScore(b));
+    } else if (status === 'Nouveau' || status === 'En cours') {
+      // Exclure les deals en retard de relance (ils sont dans "À relancer")
+      statusDeals = deals.filter(d => d.status === status && !isOverdue(d));
+    } else {
+      statusDeals = deals.filter(d => d.status === status);
+    }
+
     const totalAmount = statusDeals.reduce((s, d) => s + (d.amount || 0), 0);
 
     const column = document.createElement('div');
@@ -199,6 +299,9 @@ function createDealCard(deal) {
   const company = pipelineCompanies.find(c => c.id === deal.company_id);
   const room = ROOMS[deal.room_type];
   const roomColor = room ? ROOM_COLORS[room.type] : null;
+  const isClosed = ['Gagné', 'Perdu'].includes(deal.status);
+  const overdue = isOverdue(deal);
+  const lbl = (!isClosed) ? relanceLabel(deal) : null;
 
   // Alerte capacité
   let capacityWarning = '';
@@ -210,17 +313,18 @@ function createDealCard(deal) {
     `;
   }
 
-  // Alerte relance en retard
-  let relanceWarning = '';
-  if (deal.date_relance && !['Gagné', 'Perdu'].includes(deal.status)) {
-    const today = new Date().toISOString().split('T')[0];
-    if (deal.date_relance <= today) {
-      relanceWarning = `
-        <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--warning);margin-top:4px;">
-          <i class="fas fa-clock"></i> Relance : ${Fmt.dateRelative(deal.date_relance)}
-        </div>
-      `;
-    }
+  // Badge relance
+  let relanceBadgeHtml = '';
+  if (lbl) {
+    const colors = { overdue: 'var(--urgent)', today: 'var(--warning)', soon: 'var(--progress)' };
+    const color = colors[lbl.cls] || 'var(--muted)';
+    relanceBadgeHtml = `
+      <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:${color};margin-top:4px;">
+        <i class="fas fa-clock" style="font-size:10px;"></i>
+        <span>${lbl.text}</span>
+        <span style="color:var(--muted);">· ${deal.nb_relances || 0} relance${(deal.nb_relances || 0) > 1 ? 's' : ''}</span>
+      </div>
+    `;
   }
 
   const card = document.createElement('div');
@@ -228,8 +332,9 @@ function createDealCard(deal) {
   card.dataset.dealId = deal.id;
   card.style.cssText = `
     background: var(--surface); border-radius: 10px; padding: 14px;
-    cursor: grab; border: 1px solid var(--border);
+    cursor: grab; border: 1px solid ${overdue ? 'var(--warning)' : 'var(--border)'};
     transition: box-shadow 0.15s, transform 0.15s;
+    ${overdue ? 'border-left: 3px solid var(--warning);' : ''}
   `;
   card.onmouseenter = () => { card.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)'; card.style.transform = 'translateY(-1px)'; };
   card.onmouseleave = () => { card.style.boxShadow = 'none'; card.style.transform = 'none'; };
@@ -247,11 +352,33 @@ function createDealCard(deal) {
       ${deal.nb_guests ? `<span style="font-size:11px;color:var(--muted);"><i class="fas fa-users" style="font-size:10px;margin-right:2px;"></i>${deal.nb_guests}</span>` : ''}
       ${deal.date_event ? `<span style="font-size:11px;color:var(--muted);"><i class="fas fa-calendar" style="font-size:10px;margin-right:2px;"></i>${Fmt.date(deal.date_event)}</span>` : ''}
     </div>
-    ${deal.priority_score != null ? `<div style="margin-top:8px;">${Fmt.scoreBar(deal.priority_score)}</div>` : ''}
+    ${relanceBadgeHtml}
     ${capacityWarning}
-    ${relanceWarning}
+    ${!isClosed ? `
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <button class="deal-relance-btn" data-deal-id="${deal.id}" style="flex:1;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font-body);color:var(--accent);display:flex;align-items:center;justify-content:center;gap:4px;transition:all 0.15s;"
+          onmouseenter="this.style.background='var(--accent-soft)'" onmouseleave="this.style.background='var(--surface)'">
+          <i class="fas fa-phone-flip" style="font-size:10px;"></i> Relancé
+        </button>
+        <button class="deal-edit-btn" data-deal-id="${deal.id}" style="padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);font-size:11px;cursor:pointer;color:var(--muted);transition:all 0.15s;"
+          onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background='var(--surface)'" title="Modifier">
+          <i class="fas fa-pen" style="font-size:10px;"></i>
+        </button>
+      </div>
+    ` : ''}
   `;
 
+  // Bind buttons (stop propagation pour ne pas ouvrir la modal edit)
+  card.querySelector('.deal-relance-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openRelanceModal(deal.id);
+  });
+  card.querySelector('.deal-edit-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDealModal(deal);
+  });
+
+  // Click sur la card = éditer
   card.addEventListener('click', () => openDealModal(deal));
 
   return card;
@@ -792,4 +919,155 @@ function calculateLeadScore({ amount = 0, date_event = null, date_relance = null
   else if (nb_relances >= 1) score += 10;
 
   return Math.min(score, 100);
+}
+
+// ============================================================
+// RELANCE MODAL
+// ============================================================
+
+function injectRelanceModal() {
+  if (document.getElementById('relance-modal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'relance-modal';
+  modal.className = 'crm-modal-overlay';
+  modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,0.35);backdrop-filter:blur(2px);align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:var(--radius);box-shadow:0 8px 40px rgba(0,0,0,0.18);width:90%;max-width:440px;padding:24px;animation:modalSlideIn 0.25s ease;">
+      <div style="font-family:var(--font-head);font-size:18px;font-weight:600;margin-bottom:16px;">Enregistrer une relance</div>
+      <div id="relance-deal-info" style="font-size:13px;color:var(--muted);margin-bottom:16px;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;" id="relance-options">
+        <button class="relance-opt-btn" data-val="Mail" style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;font-family:var(--font-body);font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s;">
+          <i class="fas fa-envelope" style="color:var(--accent);"></i> Mail
+        </button>
+        <button class="relance-opt-btn" data-val="Tel" style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;font-family:var(--font-body);font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s;">
+          <i class="fas fa-phone" style="color:var(--won);"></i> Téléphone
+        </button>
+        <button class="relance-opt-btn" data-val="SMS" style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;font-family:var(--font-body);font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s;">
+          <i class="fas fa-comment-sms" style="color:var(--progress);"></i> SMS
+        </button>
+        <button class="relance-opt-btn" data-val="Autre" style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;font-family:var(--font-body);font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.15s;">
+          <i class="fas fa-ellipsis" style="color:var(--muted);"></i> Autre
+        </button>
+      </div>
+      <textarea id="relance-note" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font-body);resize:vertical;min-height:60px;margin-bottom:12px;" placeholder="Note sur cet échange (optionnel)…"></textarea>
+      <div id="relance-next-info" style="padding:10px 12px;background:var(--accent-soft);border-radius:8px;font-size:12px;color:var(--accent);margin-bottom:16px;display:none;"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-secondary" style="flex:1;padding:10px;border-radius:8px;font-size:13px;cursor:pointer;" onclick="closeRelanceModal()">Annuler</button>
+        <button class="btn-primary" style="flex:2;padding:10px;border-radius:8px;font-size:13px;cursor:pointer;" id="btn-confirm-relance">
+          <i class="fas fa-check"></i> Confirmer la relance
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  // Bind option buttons
+  modal.querySelectorAll('.relance-opt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      modal.querySelectorAll('.relance-opt-btn').forEach(b => {
+        b.style.background = 'var(--surface)';
+        b.style.borderColor = 'var(--border)';
+        b.style.fontWeight = '400';
+      });
+      btn.style.background = 'var(--accent-soft)';
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.fontWeight = '600';
+      relanceMoyen = btn.dataset.val;
+    });
+  });
+
+  // Bind confirm
+  document.getElementById('btn-confirm-relance')?.addEventListener('click', confirmRelance);
+
+  // Click overlay ferme
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeRelanceModal(); });
+}
+
+function openRelanceModal(dealId) {
+  injectRelanceModal();
+  currentRelanceId = dealId;
+  relanceMoyen = null;
+
+  const deal = pipelineDeals.find(d => d.id === dealId);
+  if (!deal) return;
+
+  const company = pipelineCompanies.find(c => c.id === deal.company_id);
+
+  // Reset
+  document.querySelectorAll('.relance-opt-btn').forEach(b => {
+    b.style.background = 'var(--surface)'; b.style.borderColor = 'var(--border)'; b.style.fontWeight = '400';
+  });
+  document.getElementById('relance-note').value = '';
+
+  // Info deal
+  const info = document.getElementById('relance-deal-info');
+  if (info) info.innerHTML = `<strong>${deal.title || company?.name || 'Deal'}</strong> · ${Fmt.currency(deal.amount)} · ${deal.nb_relances || 0} relance${(deal.nb_relances || 0) > 1 ? 's' : ''} effectuée${(deal.nb_relances || 0) > 1 ? 's' : ''}`;
+
+  // Calculer et afficher la prochaine date
+  const nextDate = computeNextRelance({ ...deal, nb_relances: (deal.nb_relances || 0) + 1 });
+  const nextEl = document.getElementById('relance-next-info');
+  if (nextDate) {
+    const diff = Math.round((new Date(nextDate) - new Date(TODAY)) / 86400000);
+    nextEl.innerHTML = `<i class="fas fa-calendar-check"></i> Prochaine relance prévue : <strong>${Fmt.date(nextDate)}</strong> (dans ${diff}j)`;
+    nextEl.style.display = 'block';
+  } else if (deal.date_event) {
+    nextEl.innerHTML = `<i class="fas fa-calendar"></i> Pas de relance prévue avant l'événement du ${Fmt.date(deal.date_event)}`;
+    nextEl.style.display = 'block';
+  } else {
+    nextEl.style.display = 'none';
+  }
+
+  // Afficher
+  document.getElementById('relance-modal').style.display = 'flex';
+}
+
+function closeRelanceModal() {
+  const modal = document.getElementById('relance-modal');
+  if (modal) modal.style.display = 'none';
+  currentRelanceId = null;
+}
+
+async function confirmRelance() {
+  if (!relanceMoyen) { Toast.warning('Choisissez un moyen de relance'); return; }
+  const deal = pipelineDeals.find(d => d.id === currentRelanceId);
+  if (!deal) return;
+
+  const note = document.getElementById('relance-note')?.value?.trim() || '';
+  const n = (deal.nb_relances || 0) + 1;
+  const nextDate = computeNextRelance({ ...deal, nb_relances: n });
+
+  // Construire le log
+  const dateJour = new Date().toLocaleDateString('fr-FR');
+  let log = `[${dateJour}] Relance #${n} par ${relanceMoyen}`;
+  if (note) log += ` : ${note}`;
+
+  const updates = {
+    status: 'En cours',
+    nb_relances: n,
+    infos: log + '\n' + (deal.infos || ''),
+  };
+  if (nextDate) updates.date_relance = nextDate;
+
+  try {
+    await DB.update('deals', deal.id, updates);
+
+    // Logger l'activité
+    await CRM.logActivity({
+      deal_id: deal.id,
+      company_id: deal.company_id,
+      type: 'call',
+      title: `Relance #${n} par ${relanceMoyen}`,
+      body: note,
+    });
+
+    const msg = nextDate
+      ? `Relance enregistrée · Prochaine le ${Fmt.date(nextDate)}`
+      : `Relance enregistrée · Pas de prochaine relance prévue`;
+    Toast.success(msg);
+    closeRelanceModal();
+    await loadPipelineData();
+  } catch (err) {
+    console.error('[Relance] Erreur:', err);
+    Toast.error('Erreur lors de l\'enregistrement');
+  }
 }

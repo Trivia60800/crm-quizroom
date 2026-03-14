@@ -64,11 +64,15 @@ async function renderAnalytics() {
       </div>
     </div>
 
-    <!-- Section Sources -->
-    <div style="display:grid;grid-template-columns:1fr;gap:20px;max-width:600px;">
+    <!-- Section Sources + Salles -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
         <h4 style="margin:0 0 12px;font-size:14px;font-weight:600;">Sources de leads</h4>
         <div style="position:relative;height:250px;"><canvas id="analytics-sources-chart"></canvas></div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
+        <h4 style="margin:0 0 12px;font-size:14px;font-weight:600;">Répartition par salle / formule</h4>
+        <div style="position:relative;height:250px;"><canvas id="analytics-rooms-chart"></canvas></div>
       </div>
     </div>
   `;
@@ -115,6 +119,7 @@ async function loadAnalyticsData() {
     renderPipelineSection(periodDeals, deals);
     renderBottlenecks(deals);
     renderSourcesChart(periodDeals, companies);
+    renderRoomsChart(periodDeals);
     renderSummaryText(periodDeals, deals, companies);
 
   } catch (err) {
@@ -287,6 +292,76 @@ function renderSourcesChart(periodDeals, companies) {
           position: 'bottom',
           labels: { font: { family: 'DM Sans', size: 11 }, padding: 10, usePointStyle: true, pointStyle: 'circle' },
         }
+      }
+    }
+  });
+  analyticsCharts.push(chart);
+}
+
+// ============================================================
+// RÉPARTITION PAR SALLE / FORMULE
+// ============================================================
+
+function renderRoomsChart(periodDeals) {
+  const ctx = document.getElementById('analytics-rooms-chart');
+  if (!ctx) return;
+
+  const roomMap = {};
+  periodDeals.forEach(d => {
+    if (!d.room_type) return;
+    const room = ROOMS[d.room_type];
+    const label = room ? room.label : d.room_type;
+    roomMap[label] = (roomMap[label] || 0) + 1;
+  });
+
+  const labels = Object.keys(roomMap);
+  const values = Object.values(roomMap);
+
+  if (!labels.length) {
+    ctx.parentElement.insertAdjacentHTML('beforeend', '<p style="text-align:center;color:var(--muted);font-size:13px;margin-top:40px;">Aucune donnée — assignez des salles aux deals</p>');
+    return;
+  }
+
+  // Couleurs par type de salle
+  const colorMap = {};
+  Object.entries(ROOMS).forEach(([k, v]) => {
+    const c = ROOM_COLORS[v.type];
+    if (c) colorMap[v.label] = c.text;
+  });
+  const defaultColors = ['#5b4cf0', '#0284c7', '#7c3aed', '#d97706', '#16a34a', '#dc2626', '#ec4899', '#9a9690'];
+  const bgColors = labels.map((l, i) => (colorMap[l] || defaultColors[i % defaultColors.length]) + '25');
+  const borderColors = labels.map((l, i) => colorMap[l] || defaultColors[i % defaultColors.length]);
+
+  const chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Nb deals',
+        data: values,
+        backgroundColor: bgColors,
+        borderColor: borderColors,
+        borderWidth: 2,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: { stepSize: 1, font: { family: 'DM Sans', size: 11 }, color: '#9a9690' },
+          grid: { color: 'rgba(0,0,0,0.04)' },
+        },
+        y: {
+          ticks: { font: { family: 'DM Sans', size: 11 }, color: '#1a1917' },
+          grid: { display: false },
+        },
       }
     }
   });
