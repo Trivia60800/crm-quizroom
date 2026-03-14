@@ -221,11 +221,10 @@ async function openCompanyDetail(companyId) {
 
   try {
     const company = await CRM.getCompany(companyId);
-    const [contacts, deals, activities, quotes] = await Promise.all([
+    const [contacts, deals, activities] = await Promise.all([
       CRM.getContacts(companyId),
       CRM.getDealsByCompany(companyId),
       CRM.getActivities(companyId),
-      DB.getWhere('quotes', 'company_id', companyId),
     ]);
 
     Loader.hide();
@@ -269,7 +268,6 @@ async function openCompanyDetail(companyId) {
         <button class="company-tab active" data-tab="apercu" style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-2px;">Aperçu</button>
         <button class="company-tab" data-tab="contacts" style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;">Contacts (${contacts.length})</button>
         <button class="company-tab" data-tab="deals" style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;">Deals (${deals.length})</button>
-        <button class="company-tab" data-tab="devis" style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;">Devis (${quotes.length})</button>
         <button class="company-tab" data-tab="activites" style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;">Activités</button>
         <button class="company-tab" data-tab="notes" style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;">Notes</button>
       </div>
@@ -290,12 +288,12 @@ async function openCompanyDetail(companyId) {
         tab.style.color = 'var(--accent)';
         tab.style.borderBottomColor = 'var(--accent)';
         tab.classList.add('active');
-        renderCompanyTab(tab.dataset.tab, company, { contacts, deals, activities, quotes });
+        renderCompanyTab(tab.dataset.tab, company, { contacts, deals, activities });
       });
     });
 
     // Afficher le premier onglet
-    renderCompanyTab('apercu', company, { contacts, deals, activities, quotes });
+    renderCompanyTab('apercu', company, { contacts, deals, activities });
 
   } catch (err) {
     Loader.hide();
@@ -316,7 +314,6 @@ function renderCompanyTab(tab, company, data) {
     case 'apercu': renderTabApercu(container, company, data); break;
     case 'contacts': renderTabContacts(container, company, data.contacts); break;
     case 'deals': renderTabDeals(container, data.deals); break;
-    case 'devis': renderTabDevis(container, data.quotes); break;
     case 'activites': renderTabActivites(container, data.activities); break;
     case 'notes': renderTabNotes(container, company); break;
   }
@@ -440,24 +437,6 @@ function renderTabDeals(container, deals) {
       `).join('')}
     </div>
   ` : emptyState('fa-handshake', 'Aucun deal', 'Créez un deal depuis le Pipeline');
-}
-
-// --- Devis ---
-function renderTabDevis(container, quotes) {
-  container.innerHTML = quotes.length ? `
-    <div style="display:grid;gap:8px;">
-      ${quotes.map(q => `
-        <div style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">
-          <div style="flex:1;">
-            <div style="font-weight:600;font-size:13px;">${q.quote_number}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px;">${Fmt.date(q.created_at)}</div>
-          </div>
-          <div style="font-weight:600;font-size:14px;color:var(--accent);">${Fmt.currency(q.total_ttc)}</div>
-          ${Fmt.statusBadge(q.status)}
-        </div>
-      `).join('')}
-    </div>
-  ` : emptyState('fa-file-invoice', 'Aucun devis');
 }
 
 // --- Activités (timeline) ---

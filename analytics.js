@@ -64,15 +64,11 @@ async function renderAnalytics() {
       </div>
     </div>
 
-    <!-- Section Devis + Sources -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
-        <h4 style="margin:0 0 12px;font-size:14px;font-weight:600;">Performance des devis</h4>
-        <div id="analytics-quotes-kpis"></div>
-      </div>
+    <!-- Section Sources -->
+    <div style="display:grid;grid-template-columns:1fr;gap:20px;max-width:600px;">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
         <h4 style="margin:0 0 12px;font-size:14px;font-weight:600;">Sources de leads</h4>
-        <canvas id="analytics-sources-chart" height="200" style="max-height:200px;"></canvas>
+        <div style="position:relative;height:250px;"><canvas id="analytics-sources-chart"></canvas></div>
       </div>
     </div>
   `;
@@ -102,28 +98,24 @@ async function loadAnalyticsData() {
 
   Loader.show();
   try {
-    const [d, c, q] = await Promise.allSettled([
+    const [d, c] = await Promise.allSettled([
       CRM.getDeals(),
       CRM.getCompanies(),
-      CRM.getQuotes(),
     ]);
     const deals = d.status === 'fulfilled' ? d.value : [];
     const companies = c.status === 'fulfilled' ? c.value : [];
-    const quotes = q.status === 'fulfilled' ? q.value : [];
 
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - analyticsPeriod);
     const cutoffISO = cutoff.toISOString();
 
     const periodDeals = deals.filter(d => d.created_at >= cutoffISO);
-    const periodQuotes = quotes.filter(q => q.created_at >= cutoffISO);
 
     renderRevenueSection(periodDeals, deals);
     renderPipelineSection(periodDeals, deals);
     renderBottlenecks(deals);
-    renderQuotesSection(periodQuotes);
     renderSourcesChart(periodDeals, companies);
-    renderSummaryText(periodDeals, periodQuotes, deals, companies);
+    renderSummaryText(periodDeals, deals, companies);
 
   } catch (err) {
     console.error('[Analytics] Erreur:', err);
@@ -251,49 +243,6 @@ function renderBottlenecks(allDeals) {
 // DEVIS
 // ============================================================
 
-function renderQuotesSection(periodQuotes) {
-  const container = document.getElementById('analytics-quotes-kpis');
-  if (!container) return;
-
-  const total = periodQuotes.length;
-  const signed = periodQuotes.filter(q => q.status === 'Signé');
-  const refused = periodQuotes.filter(q => q.status === 'Refusé');
-  const acceptRate = total ? Math.round((signed.length / total) * 100) : 0;
-
-  // Délai moyen signature
-  const signedWithDates = signed.filter(q => q.created_at && q.signed_at);
-  const avgSignDays = signedWithDates.length
-    ? Math.round(signedWithDates.reduce((s, q) => s + Math.round((new Date(q.signed_at) - new Date(q.created_at)) / 86400000), 0) / signedWithDates.length)
-    : 0;
-
-  const totalValue = signed.reduce((s, q) => s + (q.total_ttc || 0), 0);
-
-  container.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      ${kpiMiniCard('Devis créés', total, 'fa-file-invoice', 'var(--accent)')}
-      ${kpiMiniCard('Taux acceptation', Fmt.percent(acceptRate), 'fa-check-circle', 'var(--won)')}
-      ${kpiMiniCard('Délai signature moy.', `${avgSignDays}j`, 'fa-clock', 'var(--progress)')}
-      ${kpiMiniCard('Valeur signée', Fmt.currency(totalValue), 'fa-euro-sign', 'var(--won)')}
-    </div>
-    <div style="margin-top:16px;display:grid;gap:8px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
-        <span>Signés</span>
-        <span style="font-weight:600;color:var(--won);">${signed.length}</span>
-      </div>
-      <div style="height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;">
-        <div style="height:100%;width:${acceptRate}%;background:var(--won);border-radius:4px;"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
-        <span>Refusés</span>
-        <span style="font-weight:600;color:var(--urgent);">${refused.length}</span>
-      </div>
-      <div style="height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;">
-        <div style="height:100%;width:${total ? Math.round((refused.length / total) * 100) : 0}%;background:var(--urgent);border-radius:4px;"></div>
-      </div>
-    </div>
-  `;
-}
-
 // ============================================================
 // SOURCES DE LEADS
 // ============================================================
@@ -348,7 +297,7 @@ function renderSourcesChart(periodDeals, companies) {
 // RÉSUMÉ TEXTUEL
 // ============================================================
 
-function renderSummaryText(periodDeals, periodQuotes, allDeals, companies) {
+function renderSummaryText(periodDeals, allDeals, companies) {
   const el = document.getElementById('analytics-summary-text');
   if (!el) return;
 
@@ -357,7 +306,6 @@ function renderSummaryText(periodDeals, periodQuotes, allDeals, companies) {
   const revenue = won.reduce((s, d) => s + (d.amount || 0), 0);
   const active = periodDeals.filter(d => ['Nouveau', 'En cours', 'À relancer'].includes(d.status));
   const pipelineVal = active.reduce((s, d) => s + (d.amount || 0), 0);
-  const quoteSigned = periodQuotes.filter(q => q.status === 'Signé').length;
   const stuckCount = allDeals.filter(d => {
     if (!['Nouveau', 'En cours', 'À relancer'].includes(d.status)) return false;
     if (!d.updated_at) return false;
@@ -380,10 +328,6 @@ function renderSummaryText(periodDeals, periodQuotes, allDeals, companies) {
 
   if (stuckCount > 0) {
     parts.push(`⚠️ <strong>${stuckCount} deal${stuckCount > 1 ? 's' : ''}</strong> ${stuckCount > 1 ? 'sont bloqués' : 'est bloqué'} depuis plus de 21 jours — pensez à les relancer ou les clôturer.`);
-  }
-
-  if (quoteSigned > 0) {
-    parts.push(`${quoteSigned} devis ${quoteSigned > 1 ? 'ont été signés' : 'a été signé'} sur la période.`);
   }
 
   if (topSource) {

@@ -87,7 +87,6 @@ async function loadDashboardData() {
     // Chargement individuel — si une table échoue, les autres fonctionnent quand même
     const deals = await safeQuery(() => CRM.getDeals(), 'deals');
     const companies = await safeQuery(() => CRM.getCompanies(), 'companies');
-    const quotes = await safeQuery(() => CRM.getQuotes(), 'quotes');
     const relancesDues = await safeQuery(() => CRM.getRelancesDues(), 'relances');
 
     // --- KPIs ---
@@ -109,9 +108,9 @@ async function loadDashboardData() {
       ? Math.round(wonDealsData.reduce((s, d) => s + daysBetween(d.created_at, d.updated_at), 0) / wonDealsData.length)
       : 0;
 
-    const pendingQuotes = quotes.filter(q => ['Brouillon', 'Envoyé', 'Négociation'].includes(q.status)).length;
+    const activeDeals = deals.filter(d => ['Nouveau', 'En cours', 'À relancer'].includes(d.status)).length;
 
-    renderKPIs(monthRevenue, pipelineTotal, relancesDues.length, conversionRate, avgClosingDays, pendingQuotes);
+    renderKPIs(monthRevenue, pipelineTotal, relancesDues.length, conversionRate, avgClosingDays, activeDeals);
 
     // --- Charts ---
     renderCA12Chart(deals);
@@ -140,7 +139,7 @@ async function safeQuery(fn, label) {
 // KPI CARDS
 // ============================================================
 
-function renderKPIs(monthRevenue, pipelineTotal, relances, convRate, avgDays, pendingQuotes) {
+function renderKPIs(monthRevenue, pipelineTotal, relances, convRate, avgDays, activeDeals) {
   const container = document.getElementById('dashboard-kpis');
   if (!container) return;
 
@@ -150,7 +149,7 @@ function renderKPIs(monthRevenue, pipelineTotal, relances, convRate, avgDays, pe
     { label: 'Relances dues', value: relances, icon: 'fa-bell', color: relances > 0 ? 'var(--warning)' : 'var(--muted)', bg: relances > 0 ? 'var(--warning-soft)' : 'var(--surface2)' },
     { label: 'Taux conversion', value: Fmt.percent(convRate), icon: 'fa-bullseye', color: 'var(--progress)', bg: 'var(--progress-soft)' },
     { label: 'Délai closing moy.', value: `${avgDays}j`, icon: 'fa-clock', color: 'var(--muted)', bg: 'var(--surface2)' },
-    { label: 'Devis en attente', value: pendingQuotes, icon: 'fa-file-invoice', color: pendingQuotes > 0 ? 'var(--accent)' : 'var(--muted)', bg: pendingQuotes > 0 ? 'var(--accent-soft)' : 'var(--surface2)' },
+    { label: 'Deals actifs', value: activeDeals, icon: 'fa-handshake', color: activeDeals > 0 ? 'var(--accent)' : 'var(--muted)', bg: activeDeals > 0 ? 'var(--accent-soft)' : 'var(--surface2)' },
   ];
 
   container.innerHTML = kpis.map(k => `

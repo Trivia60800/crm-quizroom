@@ -198,7 +198,6 @@ const ROUTES = {
   pipeline:    { label: 'Pipeline',      icon: 'fa-columns',         render: 'renderPipeline'    },
   prospection: { label: 'Prospection',   icon: 'fa-map-marked-alt',  render: 'renderProspection' },
   companies:   { label: 'Entreprises',   icon: 'fa-building',        render: 'renderCompanies'   },
-  quotes:      { label: 'Devis',         icon: 'fa-file-invoice',    render: 'renderQuotes'      },
   analytics:   { label: 'Analytique',    icon: 'fa-chart-bar',       render: 'renderAnalytics'   },
   settings:    { label: 'Paramètres',    icon: 'fa-cog',             render: 'renderSettings'    },
 };
