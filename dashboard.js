@@ -36,11 +36,11 @@ async function renderDashboard() {
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:24px;">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
         <h3 style="margin:0 0 16px;font-size:15px;font-weight:600;font-family:var(--font-head);">CA sur 12 mois</h3>
-        <canvas id="chart-ca-12m" height="220"></canvas>
+        <div style="position:relative;height:220px;"><canvas id="chart-ca-12m"></canvas></div>
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
         <h3 style="margin:0 0 16px;font-size:15px;font-weight:600;font-family:var(--font-head);">Répartition par secteur</h3>
-        <canvas id="chart-sectors" height="220"></canvas>
+        <div style="position:relative;height:220px;"><canvas id="chart-sectors"></canvas></div>
       </div>
     </div>
 

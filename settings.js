@@ -322,6 +322,19 @@ function renderSettingsImportExport(container) {
   container.innerHTML = `
     <h3 style="margin:0 0 20px;font-family:var(--font-head);font-size:18px;font-weight:600;">Import / Export</h3>
 
+    <!-- Import ancien CRM -->
+    <div style="margin-bottom:24px;padding:20px;background:var(--accent-soft);border:1px solid rgba(91,76,240,0.15);border-radius:var(--radius);">
+      <h4 style="margin:0 0 10px;font-size:14px;font-weight:600;"><i class="fas fa-file-import" style="color:var(--accent);margin-right:6px;"></i>Importer depuis l'ancien CRM</h4>
+      <p style="margin:0 0 4px;font-size:13px;color:var(--text);">Importez votre export CSV de l'ancien CRM Quiz Room (séparateur <code>;</code>).</p>
+      <p style="margin:0 0 12px;font-size:12px;color:var(--muted);">Colonnes attendues : entreprise ; contact ; email ; tel ; prix ; status ; date_creation ; date_evenement ; date_relance ; nb_relances ; infos</p>
+      <input type="file" id="csv-old-crm" accept=".csv" style="margin-bottom:12px;font-size:13px;">
+      <br>
+      <button class="btn-primary" style="padding:10px 20px;border-radius:8px;font-size:13px;cursor:pointer;" id="btn-import-old-crm">
+        <i class="fas fa-upload"></i> Importer l'ancien CRM
+      </button>
+      <div id="import-old-result" style="margin-top:12px;"></div>
+    </div>
+
     <!-- Export -->
     <div style="margin-bottom:24px;padding:20px;background:var(--surface2);border-radius:var(--radius);">
       <h4 style="margin:0 0 10px;font-size:14px;font-weight:600;"><i class="fas fa-download" style="color:var(--accent);margin-right:6px;"></i>Exporter les données</h4>
@@ -336,10 +349,10 @@ function renderSettingsImportExport(container) {
       </div>
     </div>
 
-    <!-- Import -->
+    <!-- Import générique -->
     <div style="padding:20px;background:var(--surface2);border-radius:var(--radius);">
-      <h4 style="margin:0 0 10px;font-size:14px;font-weight:600;"><i class="fas fa-upload" style="color:var(--won);margin-right:6px;"></i>Importer des entreprises</h4>
-      <p style="margin:0 0 8px;font-size:13px;color:var(--muted);">Format CSV attendu : <code>name,sector,address,city,phone,email,website,source</code></p>
+      <h4 style="margin:0 0 10px;font-size:14px;font-weight:600;"><i class="fas fa-upload" style="color:var(--won);margin-right:6px;"></i>Importer des entreprises (CSV générique)</h4>
+      <p style="margin:0 0 8px;font-size:13px;color:var(--muted);">Format CSV (virgule) : <code>name,sector,address,city,phone,email,website,source</code></p>
       <input type="file" id="csv-file-input" accept=".csv" style="margin-bottom:12px;font-size:13px;">
       <br>
       <button class="btn-primary" style="padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;" id="btn-import-csv">
@@ -352,6 +365,7 @@ function renderSettingsImportExport(container) {
   document.getElementById('btn-export-companies')?.addEventListener('click', () => exportCSV('companies'));
   document.getElementById('btn-export-deals')?.addEventListener('click', () => exportCSV('deals'));
   document.getElementById('btn-import-csv')?.addEventListener('click', importCSV);
+  document.getElementById('btn-import-old-crm')?.addEventListener('click', importOldCRM);
 }
 
 async function exportCSV(table) {
@@ -465,6 +479,181 @@ function parseCSVLine(line) {
   }
   result.push(current);
   return result;
+}
+
+// ============================================================
+// IMPORT ANCIEN CRM (CSV séparateur ;)
+// ============================================================
+
+function parseSemicolonCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else { inQuotes = !inQuotes; }
+    } else if (ch === ';' && !inQuotes) {
+      result.push(current); current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function mapOldStatus(status) {
+  const s = (status || '').trim();
+  if (/nouveau/i.test(s)) return 'Nouveau';
+  if (/en.?cours/i.test(s)) return 'En cours';
+  if (/relancer|urgent/i.test(s)) return 'À relancer';
+  if (/gagn/i.test(s)) return 'Gagné';
+  if (/perdu|lost/i.test(s)) return 'Perdu';
+  return 'Nouveau';
+}
+
+function splitContactName(fullName) {
+  if (!fullName) return { first_name: '', last_name: '' };
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return { first_name: parts[0], last_name: '' };
+  return { first_name: parts[0], last_name: parts.slice(1).join(' ') };
+}
+
+async function importOldCRM() {
+  const fileInput = document.getElementById('csv-old-crm');
+  const resultDiv = document.getElementById('import-old-result');
+  if (!fileInput?.files?.length) { Toast.warning('Sélectionnez un fichier CSV'); return; }
+
+  if (resultDiv) resultDiv.innerHTML = `<div style="padding:12px;background:var(--accent-soft);border-radius:8px;font-size:13px;color:var(--accent);"><i class="fas fa-spinner fa-spin"></i> Import en cours…</div>`;
+
+  const file = fileInput.files[0];
+  let text = await file.text();
+  // Supprimer BOM
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+  // Séparer les lignes en tenant compte des retours à la ligne dans les champs entre guillemets
+  const rows = [];
+  let currentRow = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') inQuotes = !inQuotes;
+    if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (ch === '\r' && text[i + 1] === '\n') i++; // skip \r\n
+      if (currentRow.trim()) rows.push(currentRow);
+      currentRow = '';
+    } else {
+      currentRow += ch;
+    }
+  }
+  if (currentRow.trim()) rows.push(currentRow);
+
+  if (rows.length < 2) { Toast.warning('Le fichier semble vide'); return; }
+
+  const headers = parseSemicolonCSVLine(rows[0]).map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+  console.log('[Import] Headers détectés:', headers);
+
+  // Vérifier les colonnes essentielles
+  const entrepriseIdx = headers.indexOf('entreprise');
+  if (entrepriseIdx === -1) {
+    Toast.error('Colonne "entreprise" introuvable dans le CSV');
+    return;
+  }
+
+  let imported = 0, skipped = 0, errors = 0;
+  const total = rows.length - 1;
+
+  for (let i = 1; i < rows.length; i++) {
+    const values = parseSemicolonCSVLine(rows[i]);
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = (values[idx] || '').replace(/^"|"$/g, '').trim(); });
+
+    const entreprise = row.entreprise;
+    if (!entreprise) { skipped++; continue; }
+
+    try {
+      // 1) Créer ou trouver l'entreprise
+      let company = await CRM.checkDuplicateCompany(entreprise);
+      if (!company) {
+        company = await DB.insert('companies', {
+          name: entreprise,
+          phone: row.tel || null,
+          email: row.email || null,
+          source: 'Import ancien CRM',
+          ai_score: 0,
+        });
+      }
+
+      // 2) Créer le contact si renseigné
+      let contactId = null;
+      if (row.contact) {
+        const { first_name, last_name } = splitContactName(row.contact);
+        const contact = await DB.insert('contacts', {
+          company_id: company.id,
+          first_name,
+          last_name,
+          email: row.email || null,
+          phone: row.tel || null,
+        });
+        contactId = contact.id;
+      }
+
+      // 3) Créer le deal
+      const status = mapOldStatus(row.status);
+      const amount = parseFloat((row.prix || '0').replace(',', '.')) || 0;
+
+      await DB.insert('deals', {
+        company_id: company.id,
+        contact_id: contactId,
+        title: `${entreprise}${row.contact ? ' — ' + row.contact : ''}`,
+        amount,
+        status,
+        date_event: row.date_evenement || row['date_evenement'] || null,
+        date_relance: row.date_relance || null,
+        date_created: row.date_creation || new Date().toISOString(),
+        nb_relances: parseInt(row.nb_relances) || 0,
+        infos: row.infos || null,
+        source: 'Import ancien CRM',
+        priority_score: 0,
+      });
+
+      // 4) Si infos contient un historique de relances, le logger comme activité
+      if (row.infos) {
+        await DB.insert('activities', {
+          company_id: company.id,
+          contact_id: contactId,
+          type: 'note',
+          title: `Historique importé — ${entreprise}`,
+          body: row.infos,
+        });
+      }
+
+      imported++;
+
+      // Mise à jour du compteur
+      if (resultDiv && i % 5 === 0) {
+        resultDiv.innerHTML = `<div style="padding:12px;background:var(--accent-soft);border-radius:8px;font-size:13px;color:var(--accent);"><i class="fas fa-spinner fa-spin"></i> Import en cours… ${imported}/${total}</div>`;
+      }
+    } catch (err) {
+      console.error(`[Import] Erreur ligne ${i}:`, err.message, row);
+      errors++;
+    }
+  }
+
+  if (resultDiv) {
+    resultDiv.innerHTML = `
+      <div style="font-size:13px;padding:14px;background:var(--won-soft);border-radius:8px;color:var(--won);">
+        <i class="fas fa-check-circle"></i> Import terminé !<br>
+        <strong>${imported}</strong> dossier${imported > 1 ? 's' : ''} importé${imported > 1 ? 's' : ''}
+        (entreprises + contacts + deals + historique)
+        ${skipped ? `<br><strong>${skipped}</strong> ligne${skipped > 1 ? 's' : ''} ignorée${skipped > 1 ? 's' : ''}` : ''}
+        ${errors ? `<br><strong>${errors}</strong> erreur${errors > 1 ? 's' : ''}` : ''}
+      </div>
+    `;
+  }
+  Toast.success(`Import terminé : ${imported} dossiers importés !`);
 }
 
 // ============================================================

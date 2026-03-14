@@ -44,7 +44,7 @@ async function renderAnalytics() {
       <h3 style="font-family:var(--font-head);font-size:16px;font-weight:600;margin:0 0 14px;">Revenus</h3>
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
-          <canvas id="analytics-revenue-chart" height="200"></canvas>
+          <div style="position:relative;height:200px;"><canvas id="analytics-revenue-chart"></canvas></div>
         </div>
         <div style="display:grid;gap:12px;" id="analytics-revenue-kpis"></div>
       </div>
@@ -55,7 +55,7 @@ async function renderAnalytics() {
       <h3 style="font-family:var(--font-head);font-size:16px;font-weight:600;margin:0 0 14px;">Santé du Pipeline</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
-          <canvas id="analytics-pipeline-chart" height="200"></canvas>
+          <div style="position:relative;height:200px;"><canvas id="analytics-pipeline-chart"></canvas></div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
           <h4 style="margin:0 0 12px;font-size:14px;font-weight:600;">Goulots d'étranglement</h4>
@@ -72,7 +72,7 @@ async function renderAnalytics() {
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
         <h4 style="margin:0 0 12px;font-size:14px;font-weight:600;">Sources de leads</h4>
-        <canvas id="analytics-sources-chart" height="200"></canvas>
+        <canvas id="analytics-sources-chart" height="200" style="max-height:200px;"></canvas>
       </div>
     </div>
   `;
