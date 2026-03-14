@@ -400,8 +400,69 @@ async function openDealModal(deal = null) {
     `<option value="${s}" ${deal && deal.status === s ? 'selected' : ''}>${s}</option>`
   ).join('');
 
+  // Déterminer si le deal existant est lié à un particulier
+  const existingCompany = deal?.company_id ? companies.find(c => c.id === deal.company_id) : null;
+  const isParticulier = existingCompany?.sector === 'Particulier';
+
   const content = `
     <div style="display:grid;gap:16px;">
+
+      <!-- Section Client -->
+      <input type="hidden" id="deal-client-type-value" value="${isParticulier ? 'particulier' : 'entreprise'}">
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <label class="form-label" style="margin:0;">Client</label>
+          <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;" id="deal-client-toggle">
+            <button type="button" class="deal-toggle-btn ${!isParticulier ? 'active' : ''}" data-type="entreprise" style="padding:6px 14px;border:none;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-body);background:${!isParticulier ? 'var(--accent)' : 'var(--surface)'};color:${!isParticulier ? '#fff' : 'var(--text)'};">
+              <i class="fas fa-building" style="margin-right:4px;"></i>Entreprise
+            </button>
+            <button type="button" class="deal-toggle-btn ${isParticulier ? 'active' : ''}" data-type="particulier" style="padding:6px 14px;border:none;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-body);background:${isParticulier ? 'var(--accent)' : 'var(--surface)'};color:${isParticulier ? '#fff' : 'var(--text)'};">
+              <i class="fas fa-user" style="margin-right:4px;"></i>Particulier
+            </button>
+          </div>
+        </div>
+
+        <!-- Mode Entreprise -->
+        <div id="deal-client-entreprise" style="${isParticulier ? 'display:none;' : ''}">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+            <select id="deal-client-mode" class="form-input" style="width:auto;font-size:13px;">
+              <option value="existing" ${isEdit && deal?.company_id ? 'selected' : ''}>Client existant</option>
+              <option value="new" ${!isEdit ? '' : ''}>Nouveau client</option>
+            </select>
+          </div>
+          <div id="deal-existing-company" ${!isEdit && !deal?.company_id ? '' : ''}>
+            <select id="deal-company" class="form-input">
+              <option value="">— Sélectionner —</option>
+              ${companyOptions}
+            </select>
+          </div>
+          <div id="deal-new-company" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <input type="text" id="deal-new-company-name" class="form-input" placeholder="Nom de l'entreprise *" style="font-size:13px;">
+              <select id="deal-new-company-sector" class="form-input" style="font-size:13px;">
+                <option value="">Secteur…</option>
+                ${SECTORS.filter(s => s !== 'Particulier').map(s => `<option value="${s}">${s}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode Particulier -->
+        <div id="deal-client-particulier" style="${!isParticulier ? 'display:none;' : ''}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <input type="text" id="deal-part-prenom" class="form-input" placeholder="Prénom *" style="font-size:13px;">
+            <input type="text" id="deal-part-nom" class="form-input" placeholder="Nom *" style="font-size:13px;">
+          </div>
+        </div>
+
+        <!-- Contact (commun) -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+          <input type="email" id="deal-contact-email" class="form-input" placeholder="Email" style="font-size:13px;" value="${existingCompany?.email || ''}">
+          <input type="tel" id="deal-contact-phone" class="form-input" placeholder="Téléphone" style="font-size:13px;" value="${existingCompany?.phone || ''}">
+        </div>
+      </div>
+
+      <!-- Titre + Montant -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div>
           <label class="form-label">Titre du deal *</label>
@@ -409,38 +470,33 @@ async function openDealModal(deal = null) {
         </div>
         <div>
           <label class="form-label">Montant (€)</label>
-          <input type="number" id="deal-amount" class="form-input" value="${deal?.amount || ''}" placeholder="0" min="0" step="50">
+          <input type="number" id="deal-amount" class="form-input" value="${deal?.amount || ''}" placeholder="0" min="0" step="0.01">
         </div>
       </div>
+
+      <!-- Statut + Salle -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div>
-          <label class="form-label">Entreprise</label>
-          <select id="deal-company" class="form-input">
-            <option value="">— Sélectionner —</option>
-            ${companyOptions}
-          </select>
-        </div>
         <div>
           <label class="form-label">Statut</label>
           <select id="deal-status" class="form-input">
             ${statusOptions}
           </select>
         </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div>
-          <label class="form-label">Salle</label>
+          <label class="form-label">Salle / Formule</label>
           <select id="deal-room" class="form-input">
             <option value="">— Sélectionner —</option>
             ${roomOptions}
           </select>
         </div>
+      </div>
+
+      <!-- Participants + Dates -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
         <div>
           <label class="form-label">Nb participants</label>
           <input type="number" id="deal-guests" class="form-input" value="${deal?.nb_guests || ''}" placeholder="0" min="1">
         </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div>
           <label class="form-label">Date événement</label>
           <input type="date" id="deal-date-event" class="form-input" value="${Fmt.dateInput(deal?.date_event)}">
@@ -450,6 +506,8 @@ async function openDealModal(deal = null) {
           <input type="date" id="deal-date-relance" class="form-input" value="${Fmt.dateInput(deal?.date_relance)}">
         </div>
       </div>
+
+      <!-- Source -->
       <div>
         <label class="form-label">Source</label>
         <select id="deal-source" class="form-input">
@@ -457,10 +515,13 @@ async function openDealModal(deal = null) {
           ${LEAD_SOURCES.map(s => `<option value="${s}" ${deal?.source === s ? 'selected' : ''}>${s}</option>`).join('')}
         </select>
       </div>
+
+      <!-- Notes -->
       <div>
         <label class="form-label">Notes / Infos complémentaires</label>
         <textarea id="deal-infos" class="form-input" rows="3" placeholder="Détails, besoins spécifiques…">${deal?.infos || ''}</textarea>
       </div>
+
       <div id="deal-capacity-alert" style="display:none;padding:10px 12px;background:var(--urgent-soft);border-radius:8px;font-size:13px;color:var(--urgent);"></div>
     </div>
   `;
@@ -508,8 +569,34 @@ async function openDealModal(deal = null) {
     id: 'modal-deal',
   });
 
-  // Bind alerte capacité dynamique
+  // Bind alerte capacité dynamique + toggle client type + mode existing/new
   setTimeout(() => {
+    // --- Toggle Entreprise / Particulier ---
+    let dealClientType = isParticulier ? 'particulier' : 'entreprise';
+    document.querySelectorAll('.deal-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.deal-toggle-btn').forEach(b => {
+          b.style.background = 'var(--surface)'; b.style.color = 'var(--text)';
+        });
+        btn.style.background = 'var(--accent)'; btn.style.color = '#fff';
+        dealClientType = btn.dataset.type;
+        document.getElementById('deal-client-type-value').value = dealClientType;
+
+        const isPartType = dealClientType === 'particulier';
+        document.getElementById('deal-client-entreprise').style.display = isPartType ? 'none' : '';
+        document.getElementById('deal-client-particulier').style.display = isPartType ? '' : 'none';
+      });
+    });
+
+    // --- Toggle Client existant / Nouveau ---
+    const modeSelect = document.getElementById('deal-client-mode');
+    modeSelect?.addEventListener('change', () => {
+      const isNew = modeSelect.value === 'new';
+      document.getElementById('deal-existing-company').style.display = isNew ? 'none' : '';
+      document.getElementById('deal-new-company').style.display = isNew ? '' : 'none';
+    });
+
+    // --- Capacité salle ---
     const roomSelect = document.getElementById('deal-room');
     const guestsInput = document.getElementById('deal-guests');
     const checkCapacity = () => {
@@ -542,36 +629,123 @@ async function saveDeal(overlay, existingDeal) {
     return;
   }
 
-  const data = {
-    title,
-    amount: parseFloat(document.getElementById('deal-amount')?.value) || 0,
-    company_id: document.getElementById('deal-company')?.value || null,
-    status: document.getElementById('deal-status')?.value || 'Nouveau',
-    room_type: document.getElementById('deal-room')?.value || null,
-    nb_guests: parseInt(document.getElementById('deal-guests')?.value) || null,
-    date_event: document.getElementById('deal-date-event')?.value || null,
-    date_relance: document.getElementById('deal-date-relance')?.value || null,
-    source: document.getElementById('deal-source')?.value || null,
-    infos: document.getElementById('deal-infos')?.value?.trim() || null,
-    priority_score: calculateLeadScore({
-      amount: parseFloat(document.getElementById('deal-amount')?.value) || 0,
-      date_event: document.getElementById('deal-date-event')?.value,
-      date_relance: document.getElementById('deal-date-relance')?.value,
-      nb_relances: existingDeal?.nb_relances || 0,
-    }),
-  };
+  // --- Déterminer le client ---
+  let companyId = null;
+  let contactId = null;
+
+  // Quel mode : Entreprise ou Particulier ?
+  const isParticulier = document.getElementById('deal-client-type-value')?.value === 'particulier';
+
+  const email = document.getElementById('deal-contact-email')?.value?.trim() || null;
+  const phone = document.getElementById('deal-contact-phone')?.value?.trim() || null;
 
   try {
+    if (isParticulier) {
+      // --- Mode Particulier ---
+      const prenom = document.getElementById('deal-part-prenom')?.value?.trim();
+      const nom = document.getElementById('deal-part-nom')?.value?.trim();
+      if (!prenom && !nom) {
+        Toast.warning('Entrez au moins le nom du particulier');
+        return;
+      }
+      const fullName = [prenom, nom].filter(Boolean).join(' ');
+
+      // Créer ou trouver l'entreprise "Particulier — Nom"
+      const companyName = `Particulier — ${fullName}`;
+      let existing = await CRM.checkDuplicateCompany(companyName);
+      if (!existing) {
+        existing = await DB.insert('companies', {
+          name: companyName,
+          sector: 'Particulier',
+          phone,
+          email,
+          source: document.getElementById('deal-source')?.value || null,
+          ai_score: 0,
+        });
+      }
+      companyId = existing.id;
+
+      // Créer le contact
+      const contact = await DB.insert('contacts', {
+        company_id: companyId,
+        first_name: prenom || '',
+        last_name: nom || '',
+        email,
+        phone,
+      });
+      contactId = contact.id;
+
+    } else {
+      // --- Mode Entreprise ---
+      const mode = document.getElementById('deal-client-mode')?.value || 'existing';
+
+      if (mode === 'existing') {
+        companyId = document.getElementById('deal-company')?.value || null;
+      } else {
+        // Nouveau client
+        const newName = document.getElementById('deal-new-company-name')?.value?.trim();
+        if (!newName) {
+          Toast.warning("Entrez le nom de l'entreprise");
+          return;
+        }
+        const sector = document.getElementById('deal-new-company-sector')?.value || null;
+
+        let existing = await CRM.checkDuplicateCompany(newName);
+        if (existing) {
+          companyId = existing.id;
+          Toast.info(`"${existing.name}" existait déjà — deal rattaché`);
+        } else {
+          const newCompany = await DB.insert('companies', {
+            name: newName,
+            sector,
+            phone,
+            email,
+            source: document.getElementById('deal-source')?.value || null,
+            ai_score: 0,
+          });
+          companyId = newCompany.id;
+        }
+      }
+
+      // Mettre à jour email/tel sur l'entreprise existante si renseignés
+      if (companyId && (email || phone)) {
+        const updates = {};
+        if (email) updates.email = email;
+        if (phone) updates.phone = phone;
+        try { await DB.update('companies', companyId, updates); } catch {}
+      }
+    }
+
+    // --- Créer le deal ---
+    const data = {
+      title,
+      amount: parseFloat(document.getElementById('deal-amount')?.value) || 0,
+      company_id: companyId,
+      contact_id: contactId,
+      status: document.getElementById('deal-status')?.value || 'Nouveau',
+      room_type: document.getElementById('deal-room')?.value || null,
+      nb_guests: parseInt(document.getElementById('deal-guests')?.value) || null,
+      date_event: document.getElementById('deal-date-event')?.value || null,
+      date_relance: document.getElementById('deal-date-relance')?.value || null,
+      source: document.getElementById('deal-source')?.value || null,
+      infos: document.getElementById('deal-infos')?.value?.trim() || null,
+      priority_score: calculateLeadScore({
+        amount: parseFloat(document.getElementById('deal-amount')?.value) || 0,
+        date_event: document.getElementById('deal-date-event')?.value,
+        date_relance: document.getElementById('deal-date-relance')?.value,
+        nb_relances: existingDeal?.nb_relances || 0,
+      }),
+    };
+
     if (existingDeal) {
       await DB.update('deals', existingDeal.id, data);
       Toast.success('Deal mis à jour');
     } else {
       data.nb_relances = 0;
       const newDeal = await DB.insert('deals', data);
-      // Logger l'activité
       await CRM.logActivity({
         deal_id: newDeal.id,
-        company_id: data.company_id,
+        company_id: companyId,
         type: 'deal_created',
         title: `Deal créé : ${title}`,
       });
