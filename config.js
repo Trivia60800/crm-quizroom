@@ -4,8 +4,8 @@
 
 const CONFIG = {
   // --- Supabase ---
-  SUPABASE_URL: 'https://sdtgzlrwsrmhsvoztdat.supabase.co',
-  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNkdGd6bHJ3c3JtaHN2b3p0ZGF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxODgwMjksImV4cCI6MjA4Nzc2NDAyOX0.DZYgBhijp71scgO1fTAte5e536WsDaMb9zTFE_eoa8k',
+  SUPABASE_URL: 'https://akahfbtcxnfdhkzsccut.supabase.co',
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFrYWhmYnRjeG5mZGhrenNjY3V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0Mjc1NDcsImV4cCI6MjA4OTAwMzU0N30.gVCJOkuBhF68MKK2DbfqkJUnN22fR0JzxDqgZHTQYr4',
 
   // --- Mot de passe CRM ---
   CRM_PASSWORD: 'AMIENS2026',
