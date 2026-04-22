@@ -7,6 +7,9 @@ let companiesData = [];
 let companiesView = 'grid'; // 'grid' | 'list'
 let companiesFilters = { sector: '', source: '', search: '' };
 
+// Contacts temporaires lors de la création d'une entreprise
+let _pendingContacts = [];
+
 // ============================================================
 // RENDER PRINCIPAL
 // ============================================================
@@ -51,7 +54,6 @@ async function renderCompanies() {
     <div id="companies-container"></div>
   `;
 
-  // Bind events
   document.getElementById('companies-search')?.addEventListener('input', debounce(applyCompaniesFilters, 250));
   document.getElementById('companies-filter-sector')?.addEventListener('change', applyCompaniesFilters);
   document.getElementById('companies-filter-source')?.addEventListener('change', applyCompaniesFilters);
@@ -139,8 +141,6 @@ function renderCompaniesGrid(container, companies) {
     card.onmouseenter = () => { card.style.boxShadow = 'var(--shadow)'; card.style.transform = 'translateY(-2px)'; };
     card.onmouseleave = () => { card.style.boxShadow = 'none'; card.style.transform = 'none'; };
 
-    const sectorColor = c.sector === 'CSE' ? 'var(--accent)' : c.sector === 'Entreprise' ? 'var(--progress)' : 'var(--warning)';
-
     card.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
         <div style="width:42px;height:42px;border-radius:10px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--accent);font-size:14px;">
@@ -210,7 +210,7 @@ function renderCompaniesList(container, companies) {
 }
 
 // ============================================================
-// FICHE DÉTAIL ENTREPRISE (6 onglets)
+// FICHE DETAIL ENTREPRISE
 // ============================================================
 
 async function openCompanyDetail(companyId) {
@@ -235,8 +235,6 @@ async function openCompanyDetail(companyId) {
           <i class="fas fa-arrow-left"></i> Retour aux entreprises
         </button>
       </div>
-
-      <!-- Header fiche -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
           <div style="display:flex;align-items:center;gap:16px;">
@@ -262,8 +260,6 @@ async function openCompanyDetail(companyId) {
           </div>
         </div>
       </div>
-
-      <!-- Onglets -->
       <div style="display:flex;gap:4px;border-bottom:2px solid var(--border);margin-bottom:20px;" id="company-tabs">
         <button class="company-tab active" data-tab="apercu" style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-2px;">Aperçu</button>
         <button class="company-tab" data-tab="contacts" style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;">Contacts (${contacts.length})</button>
@@ -274,10 +270,8 @@ async function openCompanyDetail(companyId) {
       <div id="company-tab-content"></div>
     `;
 
-    // Bind navigation retour
     document.getElementById('btn-back-companies')?.addEventListener('click', renderCompanies);
 
-    // Bind onglets
     document.querySelectorAll('.company-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.company-tab').forEach(t => {
@@ -292,7 +286,6 @@ async function openCompanyDetail(companyId) {
       });
     });
 
-    // Afficher le premier onglet
     renderCompanyTab('apercu', company, { contacts, deals, activities });
 
   } catch (err) {
@@ -319,7 +312,6 @@ function renderCompanyTab(tab, company, data) {
   }
 }
 
-// --- Aperçu ---
 function renderTabApercu(container, company, data) {
   const wonDeals = data.deals.filter(d => d.status === 'Gagné');
   const totalCA = wonDeals.reduce((s, d) => s + (d.amount || 0), 0);
@@ -328,7 +320,7 @@ function renderTabApercu(container, company, data) {
   container.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
-        <h4 style="margin:0 0 16px;font-size:14px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-size:12px;">Informations</h4>
+        <h4 style="margin:0 0 16px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Informations</h4>
         <div style="display:grid;gap:12px;font-size:13px;">
           ${infoRow('fa-building', 'Secteur', company.sector)}
           ${infoRow('fa-map-marker-alt', 'Adresse', company.address)}
@@ -387,7 +379,10 @@ function activityIcon(type) {
   return map[type] || 'fa-circle';
 }
 
-// --- Contacts ---
+// ============================================================
+// ONGLET CONTACTS — cartes avec édition et affichage notes
+// ============================================================
+
 function renderTabContacts(container, company, contacts) {
   container.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -397,31 +392,83 @@ function renderTabContacts(container, company, contacts) {
       </button>
     </div>
     <div id="contacts-list">
-      ${contacts.length ? contacts.map(ct => `
-        <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;">
-          <div style="width:38px;height:38px;border-radius:50%;background:var(--progress-soft);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--progress);font-size:13px;">
-            ${Fmt.initials((ct.first_name || '') + ' ' + (ct.last_name || ''))}
-          </div>
-          <div style="flex:1;">
-            <div style="font-weight:600;font-size:13px;">${ct.first_name || ''} ${ct.last_name || ''}</div>
-            <div style="font-size:12px;color:var(--muted);">${ct.job_title || ''}</div>
-          </div>
-          <div style="display:flex;gap:8px;font-size:12px;color:var(--muted);">
-            ${ct.phone ? `<span><i class="fas fa-phone" style="font-size:10px;"></i> ${ct.phone}</span>` : ''}
-            ${ct.email ? `<span><i class="fas fa-envelope" style="font-size:10px;"></i> ${ct.email}</span>` : ''}
-          </div>
-          <button class="btn-icon" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px 8px;" onclick="deleteContact('${ct.id}', '${company.id}')">
-            <i class="fas fa-trash" style="font-size:12px;"></i>
-          </button>
-        </div>
-      `).join('') : emptyState('fa-users', 'Aucun contact', 'Ajoutez un premier contact')}
+      ${contacts.length ? contacts.map(ct => renderContactCard(ct, company.id)).join('') : emptyState('fa-users', 'Aucun contact', 'Ajoutez un premier contact')}
     </div>
   `;
 
-  document.getElementById('btn-add-contact')?.addEventListener('click', () => openContactModal(company.id));
+  document.getElementById('btn-add-contact')?.addEventListener('click', () => openContactModal(company.id, null));
+
+  container.querySelectorAll('.btn-edit-contact').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const ct = JSON.parse(decodeURIComponent(btn.dataset.contact));
+      openContactModal(company.id, ct);
+    });
+  });
+
+  container.querySelectorAll('.btn-delete-contact').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteContact(btn.dataset.id, company.id);
+    });
+  });
 }
 
-// --- Deals ---
+function renderContactCard(ct, companyId) {
+  const fullName = `${ct.first_name || ''} ${ct.last_name || ''}`.trim();
+  const contactJson = encodeURIComponent(JSON.stringify(ct));
+  const hasExtra = ct.notes || ct.exchange_history;
+
+  return `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;">
+        <div style="width:40px;height:40px;border-radius:50%;background:var(--progress-soft);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--progress);font-size:13px;flex-shrink:0;">
+          ${Fmt.initials(fullName)}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:14px;">${fullName || '—'}</div>
+          ${ct.job_title ? `<div style="font-size:12px;color:var(--muted);margin-top:1px;">${ct.job_title}</div>` : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;font-size:12px;color:var(--muted);">
+            ${ct.phone ? `<span><i class="fas fa-phone" style="font-size:10px;margin-right:4px;"></i>${ct.phone}</span>` : ''}
+            ${ct.email ? `<span><i class="fas fa-envelope" style="font-size:10px;margin-right:4px;"></i>${ct.email}</span>` : ''}
+            ${ct.linkedin ? `<a href="${ct.linkedin}" target="_blank" style="color:var(--accent);text-decoration:none;"><i class="fab fa-linkedin" style="font-size:11px;margin-right:3px;"></i>LinkedIn</a>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn-edit-contact btn-secondary" data-contact="${contactJson}"
+            style="padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;">
+            <i class="fas fa-pen" style="font-size:11px;"></i> Modifier
+          </button>
+          <button class="btn-delete-contact" data-id="${ct.id}"
+            style="padding:6px 10px;border-radius:7px;font-size:12px;cursor:pointer;background:none;border:1px solid var(--border);color:var(--muted);">
+            <i class="fas fa-trash" style="font-size:11px;"></i>
+          </button>
+        </div>
+      </div>
+      ${hasExtra ? `
+        <div style="border-top:1px solid var(--border);padding:12px 16px;background:var(--surface2);display:grid;gap:10px;">
+          ${ct.exchange_history ? `
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">
+                <i class="fas fa-history" style="margin-right:4px;"></i>Historique des échanges
+              </div>
+              <div style="font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap;">${ct.exchange_history}</div>
+            </div>
+          ` : ''}
+          ${ct.notes ? `
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">
+                <i class="fas fa-sticky-note" style="margin-right:4px;"></i>Notes
+              </div>
+              <div style="font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap;">${ct.notes}</div>
+            </div>
+          ` : ''}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
 function renderTabDeals(container, deals) {
   container.innerHTML = deals.length ? `
     <div style="display:grid;gap:8px;">
@@ -439,13 +486,11 @@ function renderTabDeals(container, deals) {
   ` : emptyState('fa-handshake', 'Aucun deal', 'Créez un deal depuis le Pipeline');
 }
 
-// --- Activités (timeline) ---
 function renderTabActivites(container, activities) {
   if (!activities.length) {
     container.innerHTML = emptyState('fa-clock', 'Aucune activité');
     return;
   }
-
   container.innerHTML = `
     <div style="position:relative;padding-left:24px;">
       <div style="position:absolute;left:7px;top:0;bottom:0;width:2px;background:var(--border);"></div>
@@ -465,7 +510,6 @@ function renderTabActivites(container, activities) {
   `;
 }
 
-// --- Notes ---
 function renderTabNotes(container, company) {
   container.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;">
@@ -477,7 +521,6 @@ function renderTabNotes(container, company) {
       </div>
     </div>
   `;
-
   document.getElementById('btn-save-notes')?.addEventListener('click', async () => {
     const notes = document.getElementById('company-notes')?.value || '';
     try {
@@ -490,12 +533,13 @@ function renderTabNotes(container, company) {
 }
 
 // ============================================================
-// MODAL AJOUT / ÉDITION ENTREPRISE
+// MODAL ENTREPRISE — avec section contacts à la création
 // ============================================================
 
 function openCompanyModal(company = null) {
   const isEdit = !!company;
   const c = company || {};
+  _pendingContacts = [];
 
   const content = `
     <div style="display:grid;gap:14px;">
@@ -506,10 +550,21 @@ function openCompanyModal(company = null) {
         </div>
         <div>
           <label class="form-label">Secteur</label>
-          <select id="comp-sector" class="form-input">
-            <option value="">— Sélectionner —</option>
-            ${SECTORS.map(s => `<option value="${s}" ${c.sector === s ? 'selected' : ''}>${s}</option>`).join('')}
-          </select>
+          <div style="position:relative;">
+            <input
+              type="text"
+              id="comp-sector"
+              class="form-input"
+              list="sectors-datalist"
+              value="${c.sector || ''}"
+              placeholder="Choisir ou saisir un secteur…"
+              autocomplete="off"
+            >
+            <datalist id="sectors-datalist">
+              ${SECTORS.map(s => `<option value="${s}">`).join('')}
+            </datalist>
+            <i class="fas fa-chevron-down" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:11px;pointer-events:none;"></i>
+          </div>
         </div>
       </div>
       <div>
@@ -544,6 +599,22 @@ function openCompanyModal(company = null) {
         </select>
       </div>
       <div id="comp-duplicate-warning" style="display:none;padding:10px;background:var(--warning-soft);border-radius:8px;font-size:13px;color:var(--warning);"></div>
+
+      ${!isEdit ? `
+        <div style="border-top:2px dashed var(--border);padding-top:14px;margin-top:4px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div>
+              <div style="font-size:13px;font-weight:600;"><i class="fas fa-users" style="margin-right:6px;color:var(--accent);"></i>Contacts rattachés</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;">Optionnel — vous pouvez en ajouter après création</div>
+            </div>
+            <button type="button" id="btn-add-pending-contact"
+              style="padding:6px 14px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);display:flex;align-items:center;gap:6px;">
+              <i class="fas fa-plus" style="font-size:10px;"></i> Ajouter
+            </button>
+          </div>
+          <div id="pending-contacts-list" style="display:grid;gap:8px;min-height:4px;"></div>
+        </div>
+      ` : ''}
     </div>
   `;
 
@@ -574,7 +645,6 @@ function openCompanyModal(company = null) {
       const name = document.getElementById('comp-name')?.value?.trim();
       if (!name) { Toast.warning('Le nom est obligatoire'); return; }
 
-      // Duplicate check
       if (!isEdit) {
         const dup = await CRM.checkDuplicateCompany(name);
         if (dup) {
@@ -599,13 +669,24 @@ function openCompanyModal(company = null) {
         if (isEdit) {
           await DB.update('companies', c.id, data);
           Toast.success('Entreprise mise à jour');
+          Modal.close(overlay);
+          await renderCompanies();
         } else {
           const newComp = await DB.insert('companies', { ...data, ai_score: 0 });
           await CRM.logActivity({ company_id: newComp.id, type: 'company_created', title: `Entreprise créée : ${name}` });
-          Toast.success('Entreprise créée');
+
+          if (_pendingContacts.length > 0) {
+            for (const ct of _pendingContacts) {
+              await DB.insert('contacts', { ...ct, company_id: newComp.id });
+            }
+            Toast.success(`Entreprise créée avec ${_pendingContacts.length} contact${_pendingContacts.length > 1 ? 's' : ''}`);
+          } else {
+            Toast.success('Entreprise créée');
+          }
+          _pendingContacts = [];
+          Modal.close(overlay);
+          await renderCompanies();
         }
-        Modal.close(overlay);
-        await renderCompanies();
       } catch (err) {
         console.error('[Companies] Save error:', err);
         Toast.error('Erreur lors de la sauvegarde');
@@ -614,79 +695,247 @@ function openCompanyModal(company = null) {
   });
 
   Modal.open({ title: isEdit ? 'Modifier l\'entreprise' : 'Nouvelle entreprise', content, size: 'lg', actions, id: 'modal-company' });
+
+  if (!isEdit) {
+    setTimeout(() => {
+      document.getElementById('btn-add-pending-contact')?.addEventListener('click', openPendingContactForm);
+    }, 50);
+  }
 }
 
 // ============================================================
-// MODAL CONTACT
+// CONTACTS EN ATTENTE (lors de la création d'entreprise)
 // ============================================================
 
-function openContactModal(companyId) {
+function openPendingContactForm() {
+  const formId = `pct-${Date.now()}`;
+  const list = document.getElementById('pending-contacts-list');
+  if (!list) return;
+
+  list.insertAdjacentHTML('beforeend', `
+    <div id="${formId}" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;position:relative;">
+      <button type="button" onclick="document.getElementById('${formId}').remove()"
+        style="position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;">
+        <i class="fas fa-times"></i>
+      </button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label class="form-label" style="font-size:11px;">Prénom *</label>
+          <input type="text" class="form-input pct-first" style="font-size:13px;" placeholder="Jean">
+        </div>
+        <div>
+          <label class="form-label" style="font-size:11px;">Nom *</label>
+          <input type="text" class="form-input pct-last" style="font-size:13px;" placeholder="Dupont">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label class="form-label" style="font-size:11px;">Email</label>
+          <input type="email" class="form-input pct-email" style="font-size:13px;" placeholder="jean@…">
+        </div>
+        <div>
+          <label class="form-label" style="font-size:11px;">Téléphone</label>
+          <input type="tel" class="form-input pct-phone" style="font-size:13px;" placeholder="06 …">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <label class="form-label" style="font-size:11px;">Poste / Fonction</label>
+          <input type="text" class="form-input pct-job" style="font-size:13px;" placeholder="Responsable CSE">
+        </div>
+        <div>
+          <label class="form-label" style="font-size:11px;">LinkedIn</label>
+          <input type="url" class="form-input pct-linkedin" style="font-size:13px;" placeholder="https://linkedin.com/in/…">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;">
+        <button type="button" class="btn-primary pct-save" style="padding:6px 14px;border-radius:7px;font-size:12px;cursor:pointer;">
+          <i class="fas fa-check"></i> Valider ce contact
+        </button>
+      </div>
+    </div>
+  `);
+
+  const formEl = document.getElementById(formId);
+  formEl?.querySelector('.pct-save')?.addEventListener('click', () => {
+    const first = formEl.querySelector('.pct-first')?.value?.trim();
+    const last = formEl.querySelector('.pct-last')?.value?.trim();
+    if (!first || !last) { Toast.warning('Prénom et nom sont obligatoires'); return; }
+
+    const idx = _pendingContacts.length;
+    _pendingContacts.push({
+      first_name: first,
+      last_name: last,
+      email: formEl.querySelector('.pct-email')?.value?.trim() || null,
+      phone: formEl.querySelector('.pct-phone')?.value?.trim() || null,
+      job_title: formEl.querySelector('.pct-job')?.value?.trim() || null,
+      linkedin: formEl.querySelector('.pct-linkedin')?.value?.trim() || null,
+    });
+
+    formEl.insertAdjacentHTML('afterend', `
+      <div data-pending-idx="${idx}"
+        style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--progress-soft);display:flex;align-items:center;justify-content:center;font-weight:600;color:var(--progress);font-size:12px;">
+          ${Fmt.initials(`${first} ${last}`)}
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:13px;">${first} ${last}</div>
+          ${_pendingContacts[idx].job_title ? `<div style="font-size:11px;color:var(--muted);">${_pendingContacts[idx].job_title}</div>` : ''}
+        </div>
+        <button type="button" onclick="removePendingContact(this, ${idx})"
+          style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px 8px;font-size:13px;">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    `);
+    formEl.remove();
+  });
+}
+
+function removePendingContact(btn, idx) {
+  _pendingContacts[idx] = null; // null pour ne pas décaler les indices
+  btn.closest('[data-pending-idx]')?.remove();
+}
+
+// ============================================================
+// MODAL CONTACT — Création ET Édition complète
+// ============================================================
+
+function openContactModal(companyId, contact = null) {
+  const isEdit = !!contact;
+  const ct = contact || {};
+
   const content = `
     <div style="display:grid;gap:14px;">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding-bottom:6px;border-bottom:1px solid var(--border);">
+        <i class="fas fa-user" style="margin-right:5px;"></i>Identité
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div>
           <label class="form-label">Prénom *</label>
-          <input type="text" id="ct-first" class="form-input" placeholder="Jean">
+          <input type="text" id="ct-first" class="form-input" value="${ct.first_name || ''}" placeholder="Jean">
         </div>
         <div>
           <label class="form-label">Nom *</label>
-          <input type="text" id="ct-last" class="form-input" placeholder="Dupont">
+          <input type="text" id="ct-last" class="form-input" value="${ct.last_name || ''}" placeholder="Dupont">
         </div>
       </div>
       <div>
         <label class="form-label">Poste / Fonction</label>
-        <input type="text" id="ct-job" class="form-input" placeholder="Responsable CSE">
+        <input type="text" id="ct-job" class="form-input" value="${ct.job_title || ''}" placeholder="Responsable CSE">
+      </div>
+
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding-bottom:6px;border-bottom:1px solid var(--border);margin-top:4px;">
+        <i class="fas fa-address-book" style="margin-right:5px;"></i>Coordonnées
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div>
           <label class="form-label">Email</label>
-          <input type="email" id="ct-email" class="form-input" placeholder="jean@…">
+          <input type="email" id="ct-email" class="form-input" value="${ct.email || ''}" placeholder="jean@…">
         </div>
         <div>
           <label class="form-label">Téléphone</label>
-          <input type="tel" id="ct-phone" class="form-input" placeholder="06 …">
+          <input type="tel" id="ct-phone" class="form-input" value="${ct.phone || ''}" placeholder="06 …">
         </div>
       </div>
       <div>
-        <label class="form-label">Notes</label>
-        <textarea id="ct-notes" class="form-input" rows="2" placeholder="Infos complémentaires…"></textarea>
+        <label class="form-label">LinkedIn</label>
+        <div style="position:relative;">
+          <i class="fab fa-linkedin" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#0077b5;font-size:14px;pointer-events:none;"></i>
+          <input type="url" id="ct-linkedin" class="form-input" value="${ct.linkedin || ''}"
+            placeholder="https://linkedin.com/in/…" style="padding-left:34px;">
+        </div>
+      </div>
+
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding-bottom:6px;border-bottom:1px solid var(--border);margin-top:4px;">
+        <i class="fas fa-sticky-note" style="margin-right:5px;"></i>Notes
+      </div>
+      <div>
+        <label class="form-label">Notes libres</label>
+        <textarea id="ct-notes" class="form-input" rows="3" style="resize:vertical;"
+          placeholder="Informations complémentaires…">${ct.notes || ''}</textarea>
+      </div>
+
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding-bottom:6px;border-bottom:1px solid var(--border);margin-top:4px;">
+        <i class="fas fa-history" style="margin-right:5px;"></i>Historique des échanges
+      </div>
+      <div>
+        <label class="form-label">Journal des échanges</label>
+        <textarea id="ct-history" class="form-input" rows="6" style="resize:vertical;line-height:1.6;"
+          placeholder="Ex :&#10;12/03/2025 — Appel : intéressé par l'offre séminaire, rappeler en mai&#10;04/04/2025 — Email envoyé avec devis&#10;20/04/2025 — RDV confirmé">${ct.exchange_history || ''}</textarea>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px;">
+          <i class="fas fa-lightbulb" style="margin-right:3px;"></i>
+          Conseil : ajoutez la date devant chaque échange pour garder un historique clair.
+        </div>
       </div>
     </div>
   `;
 
-  Modal.open({
-    title: 'Ajouter un contact',
-    content,
-    size: 'md',
-    actions: [
-      { label: 'Annuler', class: 'btn-secondary', onClick: (o) => Modal.close(o) },
-      {
-        label: 'Ajouter',
-        class: 'btn-primary',
-        onClick: async (overlay) => {
-          const first = document.getElementById('ct-first')?.value?.trim();
-          const last = document.getElementById('ct-last')?.value?.trim();
-          if (!first || !last) { Toast.warning('Prénom et nom sont obligatoires'); return; }
+  const actions = [
+    { label: 'Annuler', class: 'btn-secondary', onClick: (o) => Modal.close(o) },
+  ];
 
-          try {
-            await DB.insert('contacts', {
-              company_id: companyId,
-              first_name: first,
-              last_name: last,
-              job_title: document.getElementById('ct-job')?.value || null,
-              email: document.getElementById('ct-email')?.value || null,
-              phone: document.getElementById('ct-phone')?.value || null,
-              notes: document.getElementById('ct-notes')?.value || null,
-            });
-            Toast.success('Contact ajouté');
-            Modal.close(overlay);
-            openCompanyDetail(companyId); // Refresh la fiche
-          } catch {
-            Toast.error("Erreur lors de l'ajout du contact");
-          }
-        }
+  if (isEdit) {
+    actions.push({
+      label: 'Supprimer', class: 'btn-danger',
+      onClick: async (overlay) => {
+        const ok = await Modal.confirm({ title: 'Supprimer ce contact ?', danger: true });
+        if (!ok) return;
+        try {
+          await DB.remove('contacts', ct.id);
+          Toast.success('Contact supprimé');
+          Modal.close(overlay);
+          openCompanyDetail(companyId);
+        } catch { Toast.error('Erreur lors de la suppression'); }
       }
-    ]
+    });
+  }
+
+  actions.push({
+    label: isEdit ? 'Enregistrer' : 'Ajouter',
+    class: 'btn-primary',
+    onClick: async (overlay) => {
+      const first = document.getElementById('ct-first')?.value?.trim();
+      const last = document.getElementById('ct-last')?.value?.trim();
+      if (!first || !last) { Toast.warning('Prénom et nom sont obligatoires'); return; }
+
+      const payload = {
+        company_id: companyId,
+        first_name: first,
+        last_name: last,
+        job_title: document.getElementById('ct-job')?.value?.trim() || null,
+        email: document.getElementById('ct-email')?.value?.trim() || null,
+        phone: document.getElementById('ct-phone')?.value?.trim() || null,
+        linkedin: document.getElementById('ct-linkedin')?.value?.trim() || null,
+        notes: document.getElementById('ct-notes')?.value || null,
+        exchange_history: document.getElementById('ct-history')?.value || null,
+      };
+
+      try {
+        if (isEdit) {
+          await DB.update('contacts', ct.id, payload);
+          Toast.success('Contact mis à jour');
+        } else {
+          await DB.insert('contacts', payload);
+          Toast.success('Contact ajouté');
+        }
+        Modal.close(overlay);
+        openCompanyDetail(companyId);
+      } catch (err) {
+        console.error('[Contacts] Save error:', err);
+        Toast.error("Erreur lors de l'enregistrement du contact");
+      }
+    }
+  });
+
+  Modal.open({
+    title: isEdit
+      ? `Modifier — ${ct.first_name || ''} ${ct.last_name || ''}`.trim()
+      : 'Ajouter un contact',
+    content,
+    size: 'lg',
+    actions,
+    id: 'modal-contact'
   });
 }
 
