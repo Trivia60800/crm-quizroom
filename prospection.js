@@ -443,150 +443,116 @@ function launchSearch() {
 
   const radius = parseInt(document.getElementById('prospect-radius')?.value) || 20000;
   const mode   = getCurrentMode();
-
-  const list    = document.getElementById('prospect-results-list');
-  const countEl = document.getElementById('prospect-results-count');
-  if (list) list.innerHTML = `
-    <div style="padding:40px;text-align:center;color:var(--muted);">
-      <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:12px;display:block;"></i>
-      <div style="font-size:13px;">Recherche en cours…<br>
-        <span style="font-size:11px;">${mode === 'secteur' ? 'Récupération exhaustive de toutes les entreprises du secteur' : 'Récupération de toutes les pages'}</span>
-      </div>
-    </div>
-  `;
-  if (countEl) countEl.textContent = '';
-
   const center = prospectionMap ? prospectionMap.getCenter() : CONFIG.MAP_CENTER;
 
-  if (mode === 'secteur') {
-    launchSectorSearch(query, center, radius);
-  } else {
-    // Mode nom ou type : textSearch classique
-    fetchAllPages({ query, location: center, radius }, radius, query);
-  }
+  showSearchProgress(mode, radius);
+
+  // Tous les modes utilisent la grille de tuiles pour être exhaustifs
+  launchTiledSearch(query, center, radius, mode);
 }
 
 // ============================================================
-// RECHERCHE PAR SECTEUR — multi-requêtes pour exhaustivité
-// Stratégie : plusieurs variantes du terme + nearbySearch avec
-// le type Google correspondant pour ne rien rater
+// GRILLE DE TUILES — cœur de la recherche exhaustive
+//
+// Problème : Google Places plafonne à 60 résultats par requête
+// (3 pages × 20) quelle que soit la taille du rayon.
+// Solution : quadriller la zone en cercles qui se chevauchent,
+// lancer une requête par cellule, fusionner + dédupliquer.
+//
+// Rayon des tuiles = R/4 pour couvrir complètement sans trous.
+// Grille hexagonale (plus efficace que grille carrée).
 // ============================================================
+
+function buildHexGrid(centerLat, centerLng, radiusM) {
+  // Convertir le rayon des tuiles en degrés
+  const tileRadius = Math.max(radiusM / 3.5, 2500); // min 2.5 km
+  const latDeg  = tileRadius / 111320;
+  const lngDeg  = tileRadius / (111320 * Math.cos(centerLat * Math.PI / 180));
+
+  // Espacement hexagonal : rangées décalées
+  const rowSpacing = latDeg * Math.sqrt(3);
+  const colSpacing = lngDeg * 2;
+
+  const cells = [];
+  const maxLat = centerLat + radiusM / 111320;
+  const minLat = centerLat - radiusM / 111320;
+  const maxLng = centerLng + radiusM / (111320 * Math.cos(centerLat * Math.PI / 180));
+  const minLng = centerLng - radiusM / (111320 * Math.cos(centerLat * Math.PI / 180));
+
+  let row = 0;
+  for (let lat = minLat; lat <= maxLat + latDeg; lat += rowSpacing, row++) {
+    const offset = (row % 2) * lngDeg;
+    for (let lng = minLng - offset; lng <= maxLng + lngDeg; lng += colSpacing) {
+      // Vérifier que la cellule est dans le rayon global
+      const dLat = lat - centerLat;
+      const dLng = lng - centerLng;
+      const distM = Math.sqrt(
+        (dLat * 111320) ** 2 +
+        (dLng * 111320 * Math.cos(centerLat * Math.PI / 180)) ** 2
+      );
+      if (distM <= radiusM + tileRadius) {
+        cells.push({ lat, lng, tileRadius });
+      }
+    }
+  }
+  return cells;
+}
 
 // Mapping secteurs FR → types Google Places
 const SECTOR_TO_GOOGLE_TYPES = {
-  banque:            ['bank'],
-  'agence bancaire': ['bank'],
-  pharmacie:         ['pharmacy'],
-  restaurant:        ['restaurant'],
-  restauration:      ['restaurant', 'cafe', 'bar'],
-  café:              ['cafe'],
-  bar:               ['bar'],
-  hôtel:             ['lodging'],
-  hotel:             ['lodging'],
-  école:             ['school', 'primary_school', 'secondary_school'],
-  université:        ['university'],
-  médecin:           ['doctor'],
-  'cabinet médical': ['doctor', 'hospital', 'health'],
-  pharmacien:        ['pharmacy'],
-  'agence immobilière': ['real_estate_agency'],
-  immobilier:        ['real_estate_agency'],
-  supermarché:       ['supermarket', 'grocery_or_supermarket'],
-  'grande surface':  ['supermarket', 'department_store'],
-  coiffeur:          ['hair_care', 'beauty_salon'],
-  'salon de coiffure': ['hair_care'],
-  sport:             ['gym', 'stadium'],
-  'salle de sport':  ['gym'],
-  fitness:           ['gym'],
-  assurance:         ['insurance_agency'],
-  garage:            ['car_repair', 'car_dealer'],
-  automobile:        ['car_repair', 'car_dealer'],
-  comptable:         ['accounting'],
-  'cabinet comptable': ['accounting'],
-  avocat:            ['lawyer'],
-  notaire:           ['lawyer'],
-  mairie:            ['local_government_office', 'city_hall'],
-  collectivité:      ['local_government_office'],
-  'agence de voyage': ['travel_agency'],
-  voyage:            ['travel_agency'],
+  banque: ['bank'], 'agence bancaire': ['bank'], crédit: ['bank'],
+  pharmacie: ['pharmacy'], pharmacien: ['pharmacy'],
+  restaurant: ['restaurant'], brasserie: ['restaurant'], pizzeria: ['restaurant'],
+  restauration: ['restaurant', 'cafe', 'bar'], café: ['cafe'], bar: ['bar'],
+  hôtel: ['lodging'], hotel: ['lodging'], hébergement: ['lodging'],
+  école: ['school', 'primary_school', 'secondary_school'],
+  collège: ['secondary_school'], lycée: ['secondary_school'],
+  université: ['university'],
+  médecin: ['doctor'], 'cabinet médical': ['doctor', 'health'],
+  hôpital: ['hospital'], clinique: ['hospital'],
+  'agence immobilière': ['real_estate_agency'], immobilier: ['real_estate_agency'],
+  supermarché: ['supermarket', 'grocery_or_supermarket'],
+  'grande surface': ['supermarket', 'department_store'],
+  coiffeur: ['hair_care', 'beauty_salon'], 'salon de coiffure': ['hair_care'],
+  sport: ['gym', 'stadium'], 'salle de sport': ['gym'], fitness: ['gym'],
+  assurance: ['insurance_agency'], mutuelle: ['insurance_agency'],
+  garage: ['car_repair', 'car_dealer'], automobile: ['car_repair', 'car_dealer'],
+  comptable: ['accounting'], 'cabinet comptable': ['accounting'],
+  avocat: ['lawyer'], notaire: ['lawyer'],
+  mairie: ['local_government_office', 'city_hall'],
+  collectivité: ['local_government_office'],
+  'agence de voyage': ['travel_agency'], voyage: ['travel_agency'],
+  dentiste: ['dentist'], opticien: ['store'],
+  pressing: ['laundry'], laverie: ['laundry'],
 };
 
 function getSectorGoogleTypes(query) {
   const q = query.toLowerCase().trim();
-  // Chercher une correspondance exacte ou partielle
   for (const [key, types] of Object.entries(SECTOR_TO_GOOGLE_TYPES)) {
     if (q.includes(key) || key.includes(q)) return types;
   }
   return null;
 }
 
-async function launchSectorSearch(query, center, radius) {
-  const googleTypes = getSectorGoogleTypes(query);
-  const promises = [];
-
-  // Requête 1 : textSearch avec le terme saisi (exhaustif, paginated)
-  promises.push(new Promise(resolve => {
-    fetchAllPagesAsync({ query, location: center, radius }, resolve);
-  }));
-
-  // Requête 2 : si on a un type Google correspondant, nearbySearch par type
-  if (googleTypes && googleTypes.length > 0) {
-    googleTypes.forEach(gType => {
-      promises.push(new Promise(resolve => {
-        prospectionService.nearbySearch(
-          { location: center, radius, type: gType },
-          (results, status) => resolve(status === google.maps.places.PlacesServiceStatus.OK ? results : [])
-        );
-      }));
-    });
-  }
-
-  // Requête 3 : variantes linguistiques courantes
-  const variants = getSectorVariants(query);
-  variants.forEach(variant => {
-    if (variant !== query) {
-      promises.push(new Promise(resolve => {
-        fetchAllPagesAsync({ query: variant, location: center, radius }, resolve);
-      }));
-    }
-  });
-
-  // Attendre toutes les requêtes parallèles
-  const allResultsArrays = await Promise.all(promises);
-  const combined = allResultsArrays.flat().filter(Boolean);
-
-  // Dédupliquer
-  const seen = new Set();
-  prospectionAllResults = combined.filter(p => {
-    if (!p.place_id || seen.has(p.place_id)) return false;
-    seen.add(p.place_id);
-    return true;
-  });
-
-  finalizeResults(query, radius);
-}
-
-// Variantes de termes de recherche pour le mode secteur
 function getSectorVariants(query) {
   const variants = {
-    'banque':            ['banque', 'agence bancaire', 'crédit'],
-    'agence bancaire':   ['banque', 'agence bancaire', 'crédit', 'caisse'],
-    'pharmacie':         ['pharmacie', 'pharmacien'],
-    'restaurant':        ['restaurant', 'brasserie', 'pizzeria', 'bistrot'],
-    'restauration':      ['restaurant', 'brasserie', 'traiteur', 'café'],
-    'hôtel':             ['hôtel', 'hébergement'],
-    'école':             ['école', 'collège', 'lycée', 'établissement scolaire'],
-    'coiffeur':          ['coiffeur', 'salon de coiffure', 'barbier'],
+    'banque': ['banque', 'agence bancaire', 'crédit', 'caisse d\'épargne'],
+    'agence bancaire': ['banque', 'agence bancaire', 'crédit', 'caisse'],
+    'pharmacie': ['pharmacie', 'pharmacien', 'officine'],
+    'restaurant': ['restaurant', 'brasserie', 'pizzeria', 'bistrot', 'snack'],
+    'hôtel': ['hôtel', 'auberge', 'hébergement'],
+    'école': ['école', 'collège', 'lycée', 'établissement scolaire'],
+    'coiffeur': ['coiffeur', 'salon de coiffure', 'barbier', 'barbershop'],
     'salon de coiffure': ['salon de coiffure', 'coiffeur', 'barbier'],
-    'salle de sport':    ['salle de sport', 'fitness', 'gym', 'musculation'],
-    'sport':             ['sport', 'fitness', 'salle de sport'],
-    'garage':            ['garage', 'carrosserie', 'réparation auto'],
-    'automobile':        ['garage', 'concessionnaire', 'carrosserie'],
-    'assurance':         ['assurance', 'mutuelle', 'assureur'],
-    'supermarché':       ['supermarché', 'superette', 'épicerie'],
-    'agence immobilière':['agence immobilière', 'immobilier'],
-    'cabinet médical':   ['médecin', 'cabinet médical', 'généraliste', 'spécialiste'],
+    'salle de sport': ['salle de sport', 'fitness', 'gym', 'musculation', 'CrossFit'],
+    'garage': ['garage', 'carrosserie', 'réparation auto', 'mécanique'],
+    'assurance': ['assurance', 'mutuelle', 'assureur', 'compagnie d\'assurance'],
+    'supermarché': ['supermarché', 'superette', 'épicerie', 'alimentation'],
+    'agence immobilière': ['agence immobilière', 'immobilier', 'promoteur'],
+    'cabinet médical': ['médecin', 'généraliste', 'cabinet médical', 'spécialiste'],
     'cabinet comptable': ['expert-comptable', 'cabinet comptable', 'comptabilité'],
-    'agence de voyage':  ['agence de voyage', 'voyagiste', 'tourisme'],
+    'agence de voyage': ['agence de voyage', 'voyagiste', 'tourisme'],
+    'dentiste': ['dentiste', 'cabinet dentaire', 'chirurgien-dentiste'],
   };
   const q = query.toLowerCase();
   for (const [key, vars] of Object.entries(variants)) {
@@ -595,86 +561,171 @@ function getSectorVariants(query) {
   return [query];
 }
 
-// Version async de fetchAllPages pour les requêtes parallèles
-function fetchAllPagesAsync(request, onComplete) {
-  const localResults = [];
+async function launchTiledSearch(query, center, radius, mode) {
+  const centerLat = typeof center.lat === 'function' ? center.lat() : center.lat;
+  const centerLng = typeof center.lng === 'function' ? center.lng() : center.lng;
 
-  function doFetch(req) {
-    prospectionService.textSearch(req, (results, status, pagination) => {
-      if (status === google.maps.places.PlacesServiceStatus.OK && results?.length) {
-        localResults.push(...results);
-        if (pagination?.hasNextPage) {
-          setTimeout(() => pagination.nextPage(), 2100);
-        } else {
-          onComplete(localResults);
-        }
-      } else {
-        onComplete(localResults);
+  const cells = buildHexGrid(centerLat, centerLng, radius);
+  const tileRadius = cells[0]?.tileRadius || Math.max(radius / 3.5, 2500);
+
+  updateProgress(`Quadrillage : ${cells.length} zones à analyser…`, 0, cells.length);
+
+  // Variantes de la requête
+  const variants = mode === 'secteur' ? getSectorVariants(query) : [query];
+  const googleTypes = (mode === 'secteur' || mode === 'type') ? getSectorGoogleTypes(query) : null;
+
+  const allRaw = [];
+  let completed = 0;
+
+  // Traiter les cellules par lots de 5 (éviter de surcharger l'API)
+  const BATCH = 5;
+  for (let i = 0; i < cells.length; i += BATCH) {
+    if (prospectionSearchAborted) break;
+    const batch = cells.slice(i, i + BATCH);
+
+    await Promise.all(batch.map(cell => {
+      const cellCenter = new google.maps.LatLng(cell.lat, cell.lng);
+      const cellPromises = [];
+
+      // textSearch pour chaque variante
+      variants.forEach(v => {
+        cellPromises.push(tileTextSearch(v, cellCenter, tileRadius));
+      });
+
+      // nearbySearch par type Google si disponible
+      if (googleTypes) {
+        googleTypes.forEach(gType => {
+          cellPromises.push(tileNearbySearch(gType, cellCenter, tileRadius));
+        });
       }
-    });
+
+      return Promise.all(cellPromises).then(results => {
+        allRaw.push(...results.flat());
+        completed++;
+        updateProgress(
+          `Zone ${completed}/${cells.length} analysée…`,
+          completed,
+          cells.length
+        );
+      });
+    }));
+
+    // Petite pause entre les lots pour respecter les quotas
+    if (i + BATCH < cells.length) await sleep(300);
   }
 
-  doFetch(request);
+  // Dédupliquer par place_id
+  const seen = new Set();
+  prospectionAllResults = allRaw.filter(p => {
+    if (!p?.place_id || seen.has(p.place_id)) return false;
+    seen.add(p.place_id);
+    return true;
+  });
+
+  finalizeResults(query, radius);
 }
 
-// ============================================================
-// PAGINATION EXHAUSTIVE — mode nom / type
-// ============================================================
+// Une requête textSearch sur une tuile, avec pagination complète
+function tileTextSearch(query, center, radius) {
+  return new Promise(resolve => {
+    const results = [];
+    function doPage(paginationToken) {
+      const req = paginationToken
+        ? null // nextPage() est appelé sur l'objet pagination
+        : { query, location: center, radius };
 
-function fetchAllPages(request, radius, query) {
-  prospectionService.textSearch(request, (results, status, pagination) => {
-    if (status === google.maps.places.PlacesServiceStatus.OK && results?.length) {
-      prospectionAllResults = prospectionAllResults.concat(results);
-      updateResultsDisplay(query, radius, pagination?.hasNextPage);
+      if (!req) { resolve(results); return; } // sécurité
 
-      // Si il y a une page suivante, attendre 2s (limite Google) puis fetch
-      if (pagination?.hasNextPage && !prospectionSearchAborted) {
-        const countEl = document.getElementById('prospect-results-count');
-        if (countEl) countEl.textContent = `${prospectionAllResults.length} trouvé${prospectionAllResults.length > 1 ? 's' : ''} (chargement page suivante…)`;
-
-        setTimeout(() => {
-          if (!prospectionSearchAborted) pagination.nextPage();
-        }, 2100);
-      } else {
-        finalizeResults(query, radius);
-      }
-    } else if (prospectionAllResults.length > 0) {
-      // Fin de pagination
-      finalizeResults(query, radius);
-    } else {
-      // Aucun résultat du tout
-      const list = document.getElementById('prospect-results-list');
-      if (list) list.innerHTML = emptyState('fa-search', 'Aucun résultat', `Aucune entreprise trouvée pour "${query}" dans un rayon de ${radius / 1000} km`);
-      const countEl = document.getElementById('prospect-results-count');
-      if (countEl) countEl.textContent = '0 résultat';
+      prospectionService.textSearch(req, (res, status, pagination) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && res?.length) {
+          results.push(...res);
+          if (pagination?.hasNextPage) {
+            setTimeout(() => pagination.nextPage((r2, s2, p2) => {
+              if (s2 === google.maps.places.PlacesServiceStatus.OK && r2?.length) {
+                results.push(...r2);
+                if (p2?.hasNextPage) {
+                  setTimeout(() => p2.nextPage((r3, s3) => {
+                    if (s3 === google.maps.places.PlacesServiceStatus.OK && r3?.length) results.push(...r3);
+                    resolve(results);
+                  }), 2100);
+                } else resolve(results);
+              } else resolve(results);
+            }), 2100);
+          } else resolve(results);
+        } else resolve(results);
+      });
     }
+    doPage();
   });
 }
 
-function updateResultsDisplay(query, radius, hasMore) {
-  // Mise à jour partielle (pendant le chargement des pages)
-  addMarkersToMap(prospectionAllResults.slice(-20)); // ajouter seulement les nouveaux
+// Une requête nearbySearch sur une tuile
+function tileNearbySearch(type, center, radius) {
+  return new Promise(resolve => {
+    prospectionService.nearbySearch(
+      { location: center, radius, type },
+      (results, status) => resolve(status === google.maps.places.PlacesServiceStatus.OK ? (results || []) : [])
+    );
+  });
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ============================================================
+// AFFICHAGE PROGRESSION
+// ============================================================
+
+function showSearchProgress(mode, radius) {
+  const list    = document.getElementById('prospect-results-list');
+  const countEl = document.getElementById('prospect-results-count');
+  if (list) list.innerHTML = `
+    <div style="padding:30px 20px;text-align:center;color:var(--muted);">
+      <i class="fas fa-radar fa-spin" style="font-size:28px;margin-bottom:14px;display:block;color:var(--accent);"></i>
+      <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:6px;">Analyse exhaustive en cours…</div>
+      <div style="font-size:12px;margin-bottom:16px;" id="progress-label">Initialisation…</div>
+      <div style="background:var(--surface2);border-radius:100px;height:6px;overflow:hidden;max-width:260px;margin:0 auto;">
+        <div id="progress-bar" style="height:100%;width:0%;background:var(--accent);border-radius:100px;transition:width 0.3s;"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;">
+        La zone est découpée en sous-zones pour ne manquer aucune entreprise
+      </div>
+    </div>
+  `;
+  if (countEl) countEl.textContent = '';
+}
+
+function updateProgress(label, done, total) {
+  const labelEl = document.getElementById('progress-label');
+  const barEl   = document.getElementById('progress-bar');
+  if (labelEl) labelEl.textContent = label;
+  if (barEl && total > 0) barEl.style.width = `${Math.round((done / total) * 100)}%`;
+
+  // Mettre à jour le compteur en temps réel
+  const countEl = document.getElementById('prospect-results-count');
+  if (countEl && prospectionAllResults.length > 0) {
+    countEl.textContent = `${prospectionAllResults.length} trouvé${prospectionAllResults.length > 1 ? 's' : ''} (analyse en cours…)`;
+  }
 }
 
 function finalizeResults(query, radius) {
   if (prospectionSearchAborted) return;
 
-  // Dédupliquer par place_id
-  const seen = new Set();
-  const unique = prospectionAllResults.filter(p => {
-    if (!p.place_id || seen.has(p.place_id)) return false;
-    seen.add(p.place_id);
-    return true;
-  });
-  prospectionAllResults = unique;
+  // Trier par distance au centre (les plus proches d'abord)
+  const center = prospectionMap ? prospectionMap.getCenter() : CONFIG.MAP_CENTER;
+  const cLat = typeof center.lat === 'function' ? center.lat() : center.lat;
+  const cLng = typeof center.lng === 'function' ? center.lng() : center.lng;
 
-  // Trier : d'abord par pertinence (note + nb avis)
-  unique.sort((a, b) => {
-    const scoreA = (a.rating || 0) * Math.log(1 + (a.user_ratings_total || 1));
-    const scoreB = (b.rating || 0) * Math.log(1 + (b.user_ratings_total || 1));
-    return scoreB - scoreA;
+  prospectionAllResults.sort((a, b) => {
+    const distA = a.geometry?.location
+      ? Math.hypot(a.geometry.location.lat() - cLat, a.geometry.location.lng() - cLng)
+      : 9999;
+    const distB = b.geometry?.location
+      ? Math.hypot(b.geometry.location.lat() - cLat, b.geometry.location.lng() - cLng)
+      : 9999;
+    return distA - distB;
   });
 
+  const unique = prospectionAllResults;
   const radiusLabel = radius >= 1000 ? `${radius / 1000} km` : `${radius} m`;
   const countEl = document.getElementById('prospect-results-count');
   if (countEl) countEl.textContent = `${unique.length} résultat${unique.length > 1 ? 's' : ''} dans ${radiusLabel}`;
@@ -696,6 +747,7 @@ function finalizeResults(query, radius) {
 
   // Ajuster la carte
   if (unique.length > 0 && prospectionMap) {
+    addMarkersToMap(unique);
     const bounds = new google.maps.LatLngBounds();
     unique.forEach(p => { if (p.geometry?.location) bounds.extend(p.geometry.location); });
     prospectionMap.fitBounds(bounds);

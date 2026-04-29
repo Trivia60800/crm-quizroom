@@ -831,7 +831,7 @@ async function saveDeal(overlay, existingDeal, linkedContact = null) {
         const nom2 = document.getElementById('deal-part-nom')?.value?.trim() || '';
         resolvedTitle = [prenom2, nom2].filter(Boolean).join(' ') || 'Sans titre';
       } else {
-        const comp = companies.find(c => c.id === companyId);
+        const comp = pipelineCompanies.find(c => c.id === companyId) || (await CRM.getCompanies()).find(c => c.id === companyId);
         resolvedTitle = comp?.name || 'Sans titre';
       }
     }
